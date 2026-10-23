@@ -53,14 +53,21 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
         setBoot({ status: "loading", step: "Checking campaigns" });
         const campaigns = await repos.entities.list({ kinds: ["campaign"] });
-        if (campaigns.length === 0) {
+        // Seed Embers of Hollowmere only on the first launch of a fresh database. Deleting the
+        // last campaign (including the demo) must not recreate it on the next start — use
+        // Campaigns → Reset demo campaign if you want it back.
+        const firstRunComplete = await repos.settings.get<boolean>("first_run_complete", false);
+        if (campaigns.length === 0 && !firstRunComplete) {
           setBoot({ status: "loading", step: "Seeding the demo campaign" });
           const ids = await seedDemoCampaign(repos);
           setCampaignId(ids.campaign);
+        } else if (campaigns.length === 0) {
+          setCampaignId(null);
         } else if (!campaignId || !campaigns.some((c) => c.id === campaignId)) {
           const demo = await findDemoCampaign(repos);
           setCampaignId((demo ?? campaigns[0]!).id);
         }
+        await repos.settings.set("first_run_complete", true);
         if (settings.autoBackupOnStart && migration.to > 0) {
           setBoot({ status: "loading", step: "Creating startup snapshot" });
           await platform.autoBackup(settings.autoBackupKeep).catch((error) => console.warn("auto backup failed", error));

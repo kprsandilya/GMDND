@@ -17,7 +17,7 @@ find the data intact.*
 | Repositories over an `SqlDriver` abstraction (Tauri IPC / `node:sqlite`) | done | `src/persistence/` |
 | Navigation shell with all 15 modules, command palette (Ctrl+K), global search (Ctrl+Shift+F) | done | `src/app/Shell.tsx`, `CommandPalette.tsx`, `features/search` |
 | Campaigns, worlds, geographic hierarchy, lore records, typed links, `[[wiki links]]` | done | `features/campaigns`, `features/locations`, `features/lore`, `components/` |
-| Connected seed campaign, resettable | done | `src/seed/demoCampaign.ts` |
+| Connected seed campaign, resettable (first launch only; deleting it does not bring it back) | done | `src/seed/demoCampaign.ts`, `src/app/appContext.tsx` |
 | Offline verification: window launches, no network | done | `npm run smoke` |
 
 ## Phase 2 – Map and dungeon editing — done

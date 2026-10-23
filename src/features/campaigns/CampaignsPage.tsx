@@ -52,6 +52,10 @@ export function CampaignsPage() {
   });
 
   const selected = campaigns.data?.find((c) => c.id === campaignId) ?? null;
+  const hasDemo = (campaigns.data ?? []).some((c) => {
+    const fields = campaignFieldsSchema.safeParse(c.fields);
+    return fields.success && fields.data.is_demo;
+  });
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -61,7 +65,7 @@ export function CampaignsPage() {
         actions={
           <>
             <Button variant="outline" onClick={() => setResetting(true)}>
-              <RotateCcw size={13} /> Reset demo campaign
+              <RotateCcw size={13} /> {hasDemo ? "Reset demo campaign" : "Restore demo campaign"}
             </Button>
             <Button variant="primary" onClick={() => setCreating(true)}>
               <Plus size={13} /> New campaign
@@ -71,6 +75,9 @@ export function CampaignsPage() {
       />
       <div className="grid min-h-0 flex-1 grid-cols-[360px_1fr] overflow-hidden">
         <ul className="overflow-y-auto border-r border-border bg-bg-elevated p-2">
+          {(campaigns.data ?? []).length === 0 && (
+            <li className="p-3 text-[12.5px] text-ink-muted">No campaigns. Create one, or restore the Hollowmere demo — it will not come back on its own.</li>
+          )}
           {(campaigns.data ?? []).map((c) => {
             const fields = campaignFieldsSchema.safeParse(c.fields);
             const isDemo = fields.success && fields.data.is_demo;
@@ -136,9 +143,9 @@ export function CampaignsPage() {
       <ConfirmDialog
         open={resetting}
         onOpenChange={setResetting}
-        title={`Reset "${DEMO_CAMPAIGN_NAME}"?`}
-        body="The demo campaign is deleted and re-created from scratch with its original content. Your other campaigns are not affected."
-        confirmLabel="Reset demo"
+        title={hasDemo ? `Reset "${DEMO_CAMPAIGN_NAME}"?` : `Restore "${DEMO_CAMPAIGN_NAME}"?`}
+        body={hasDemo ? "The demo campaign is deleted and re-created from scratch with its original content. Your other campaigns are not affected." : "Creates the original Hollowmere seed campaign again. Your other campaigns are not affected."}
+        confirmLabel={hasDemo ? "Reset demo" : "Restore demo"}
         onConfirm={() => reset.mutateAsync(undefined as never).then(() => undefined)}
       />
     </div>
