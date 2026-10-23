@@ -1,0 +1,23 @@
+# dependencies
+node_modules/
+
+# build output
+dist/
+dist-ssr/
+public/fmg/
+
+# rust
+src-tauri/target/
+src-tauri/gen/schemas/
+
+# editor / os
+.vscode/*
+!.vscode/extensions.json
+.idea/
+.DS_Store
+Thumbs.db
+*.local
+*.log
+
+# e2e smoke screenshots
+smoke-artifacts/

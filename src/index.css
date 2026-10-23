@@ -1,0 +1,159 @@
+@import "tailwindcss";
+
+@theme {
+  --color-bg: #14110f;
+  --color-bg-elevated: #1c1815;
+  --color-bg-panel: #221d19;
+  --color-bg-hover: #2b2521;
+  --color-bg-active: #352d27;
+  --color-border: #3a322c;
+  --color-border-strong: #4d423a;
+  --color-ink: #e8e1d3;
+  --color-ink-muted: #a89d8c;
+  --color-ink-faint: #74695c;
+  --color-ember: #d4883c;
+  --color-ember-soft: #f0b36a;
+  --color-gold: #c9a44c;
+  --color-moss: #5fa86a;
+  --color-blood: #b5483f;
+  --color-water: #3f7fbf;
+  --color-violet: #8a6bbf;
+  --font-display: "Iowan Old Style", "Palatino Linotype", "Book Antiqua", Palatino, Georgia, serif;
+  --font-sans: "Segoe UI", system-ui, -apple-system, sans-serif;
+  --font-mono: "Cascadia Code", Consolas, "Courier New", monospace;
+}
+
+@layer base {
+  html,
+  body,
+  #root {
+    height: 100%;
+    margin: 0;
+    overflow: hidden;
+  }
+  body {
+    background: var(--color-bg);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+    font-size: 13px;
+    line-height: 1.45;
+    -webkit-font-smoothing: antialiased;
+    user-select: none;
+  }
+  input,
+  textarea,
+  select,
+  [contenteditable],
+  .selectable {
+    user-select: text;
+  }
+  h1,
+  h2,
+  h3,
+  h4 {
+    font-family: var(--font-display);
+    font-weight: 600;
+    letter-spacing: 0.01em;
+  }
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: var(--color-border-strong);
+    border-radius: 6px;
+    border: 2px solid var(--color-bg);
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  :focus-visible {
+    outline: 2px solid var(--color-ember);
+    outline-offset: 1px;
+  }
+  button {
+    cursor: pointer;
+  }
+  button:disabled {
+    cursor: not-allowed;
+  }
+}
+
+@layer components {
+  .input {
+    @apply w-full rounded border border-border bg-bg px-2.5 py-1.5 text-[13px] text-ink placeholder:text-ink-faint focus:border-ember focus:outline-none disabled:opacity-60;
+  }
+  .label {
+    @apply mb-1 block text-[11px] font-semibold uppercase tracking-wide text-ink-muted;
+  }
+  .panel {
+    @apply rounded-md border border-border bg-bg-panel;
+  }
+  .panel-title {
+    @apply flex items-center justify-between border-b border-border px-3 py-2 text-[11px] font-semibold uppercase tracking-wider text-ink-muted;
+  }
+  .chip {
+    @apply inline-flex items-center gap-1 rounded-full border border-border bg-bg-elevated px-2 py-0.5 text-[11px] text-ink-muted;
+  }
+  .row-hover {
+    @apply hover:bg-bg-hover;
+  }
+  .row-active {
+    @apply bg-bg-active text-ink;
+  }
+  .prose-dm {
+    @apply text-[13px] leading-relaxed text-ink;
+  }
+  .prose-dm h1,
+  .prose-dm h2,
+  .prose-dm h3 {
+    @apply mt-4 mb-2 text-ember-soft;
+  }
+  .prose-dm h1 {
+    @apply text-xl;
+  }
+  .prose-dm h2 {
+    @apply text-lg;
+  }
+  .prose-dm h3 {
+    @apply text-base;
+  }
+  .prose-dm p {
+    @apply my-2;
+  }
+  .prose-dm ul,
+  .prose-dm ol {
+    @apply my-2 ml-5 list-disc;
+  }
+  .prose-dm ol {
+    @apply list-decimal;
+  }
+  .prose-dm a {
+    @apply text-gold underline decoration-dotted underline-offset-2 hover:text-ember-soft;
+  }
+  .prose-dm a[href^="#missing"] {
+    @apply text-blood decoration-wavy;
+  }
+  .prose-dm blockquote {
+    @apply my-2 border-l-2 border-ember pl-3 italic text-ink-muted;
+  }
+  .prose-dm code {
+    @apply rounded bg-bg px-1 font-mono text-[12px] text-ember-soft;
+  }
+  .prose-dm strong {
+    @apply text-ink;
+  }
+  .prose-dm table {
+    @apply my-2 w-full border-collapse text-[12px];
+  }
+  .prose-dm th,
+  .prose-dm td {
+    @apply border border-border px-2 py-1 text-left;
+  }
+  .read-aloud {
+    @apply rounded-md border border-gold/40 bg-gold/5 p-3 font-display text-[14px] italic leading-relaxed text-ink;
+  }
+  .secret-block {
+    @apply rounded-md border border-violet/50 bg-violet/10 p-3;
+  }
+}

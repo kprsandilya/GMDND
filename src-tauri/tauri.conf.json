@@ -1,0 +1,57 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "DM Workbench",
+  "version": "0.1.0",
+  "identifier": "com.dmworkbench.app",
+  "build": {
+    "beforeDevCommand": "npm run dev",
+    "devUrl": "http://localhost:1420",
+    "beforeBuildCommand": "npm run build",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "DM Workbench",
+        "width": 1600,
+        "height": 960,
+        "minWidth": 1100,
+        "minHeight": 680,
+        "center": true,
+        "maximized": true,
+        "resizable": true,
+        "decorations": true,
+        "dragDropEnabled": false
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self' data: blob:; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline' https:; font-src 'self' data: https:; img-src 'self' asset: http://asset.localhost data: blob: https:; media-src 'self' data: blob:; connect-src 'self' ipc: http://ipc.localhost data: blob: https:; frame-src 'self'; worker-src 'self' blob:",
+      "dangerousDisableAssetCspModification": true,
+      "assetProtocol": {
+        "enable": true,
+        "scope": ["$APPDATA/assets/**"]
+      }
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["nsis", "msi"],
+    "category": "Utility",
+    "shortDescription": "Private Dungeon Master workbench for D&D 5e",
+    "longDescription": "Worldbuilding, world and dungeon maps, encounters, inventories and session management in a single offline desktop application.",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "windows": {
+      "nsis": {
+        "installMode": "currentUser",
+        "languages": ["English"]
+      }
+    }
+  }
+}
