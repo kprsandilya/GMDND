@@ -361,7 +361,7 @@ function MapView({ mapId, active, onDeleted }: { mapId: string; active: boolean;
         const hit = doc.createElementNS(ns, "circle");
         hit.setAttribute("cx", String(link.x));
         hit.setAttribute("cy", String(link.y));
-        hit.setAttribute("r", "8");
+        hit.setAttribute("r", "4");
         hit.setAttribute("fill", "transparent");
         hit.setAttribute("pointer-events", "all");
         hit.setAttribute("cursor", "pointer");
