@@ -375,6 +375,13 @@ CREATE TABLE IF NOT EXISTS assets (
 );
 `,
   },
+  {
+    version: 2,
+    name: "combatant instance sheets",
+    sql: `
+ALTER TABLE combatants ADD COLUMN sheet TEXT NOT NULL DEFAULT '{}';
+`,
+  },
 ];
 
 export const CURRENT_SCHEMA_VERSION = MIGRATIONS[MIGRATIONS.length - 1]!.version;
@@ -387,7 +394,22 @@ export async function getSchemaVersion(driver: SqlDriver): Promise<number> {
   return rows[0]?.v ?? 0;
 }
 
+/** Drops a leftover BEGIN so the next write is not "cannot start a transaction within a transaction". */
+export async function abandonOpenTransaction(driver: SqlDriver): Promise<void> {
+  try {
+    await driver.executeScript("ROLLBACK");
+  } catch {
+    // already autocommit
+  }
+}
+
+function isIgnorableMigrationError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return /duplicate column name/i.test(message);
+}
+
 export async function migrate(driver: SqlDriver): Promise<{ from: number; to: number }> {
+  await abandonOpenTransaction(driver);
   const from = await getSchemaVersion(driver);
   if (from > CURRENT_SCHEMA_VERSION) {
     throw new Error(
@@ -396,7 +418,13 @@ export async function migrate(driver: SqlDriver): Promise<{ from: number; to: nu
   }
   for (const migration of MIGRATIONS) {
     if (migration.version <= from) continue;
-    await driver.executeScript(`BEGIN;\n${migration.sql}\nCOMMIT;`);
+    // Do not wrap DDL in BEGIN/COMMIT. ALTER TABLE starts its own transaction; nesting it
+    // produces "cannot start a transaction within a transaction" and can leave the connection dirty.
+    try {
+      await driver.executeScript(migration.sql);
+    } catch (error) {
+      if (!isIgnorableMigrationError(error)) throw error;
+    }
     await driver.execute("INSERT INTO schema_migrations (version, name, applied_at) VALUES (?, ?, ?)", [
       migration.version,
       migration.name,

@@ -1,8 +1,10 @@
-import { useQuery } from "@tanstack/react-query";
-import { BookOpen, DoorOpen, Eye, EyeOff, Hand, RotateCcw, Swords, Trash2 } from "lucide-react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { BookOpen, DoorOpen, Eye, EyeOff, Hand, ImagePlus, RotateCcw, Swords, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { Link } from "react-router";
+import { toast } from "sonner";
 import { useRepos } from "@/app/appContext";
+import { platform, IMAGE_FILTER } from "@/app/platform";
 import { useEntities, useEntity } from "@/app/queries";
 import { EntityPicker } from "@/components/EntityPicker";
 import { InventoryPanel, useInventory } from "@/components/InventoryPanel";
@@ -11,7 +13,9 @@ import { Badge, Button, Checkbox, Field, Input, Select, Textarea } from "@/compo
 import { availableInteractions, defaultInteractionsFor } from "@/domain/interactions";
 import type { Door, InteractionDefinition, MapMarker, MapObject, Room, Token } from "@/domain/types";
 import { tokenOwner } from "@/domain/workflows/interactionWorkflow";
-import { cn } from "@/lib/utils";
+import { ROOM_LOOT_REF } from "@/domain/workflows/lootMarker";
+import { cn, errorMessage } from "@/lib/utils";
+import { CombatantSheet, formatActionRoll } from "@/features/encounters/CombatantSheet";
 import { selectedOfType, useEditor } from "./editorStore";
 import type { DungeonPlay } from "./useDungeonPlay";
 
@@ -136,6 +140,29 @@ function FloorInspector() {
           <Button size="sm" variant="outline" className="mt-2" disabled={size.w === data.floor.width && size.h === data.floor.height && size.feet === data.floor.cell_feet} onClick={() => void updateFloor({ width: Math.max(5, size.w), height: Math.max(5, size.h), cell_feet: Math.max(1, size.feet) })}>
             Apply size
           </Button>
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={async () => {
+                try {
+                  const src = await platform.pickFile({ title: "Battle map image under the grid", filters: IMAGE_FILTER });
+                  if (!src) return;
+                  const asset = await platform.importFileAsset(src, "battlemaps");
+                  await updateFloor({ background_asset: asset.rel_path });
+                } catch (e) {
+                  toast.error(errorMessage(e));
+                }
+              }}
+            >
+              <ImagePlus size={12} /> {data.floor.background_asset ? "Replace battle map image" : "Add battle map image"}
+            </Button>
+            {data.floor.background_asset && (
+              <Button size="sm" variant="ghost" onClick={() => void updateFloor({ background_asset: null })}>
+                Clear image
+              </Button>
+            )}
+          </div>
           <p className="mt-2 text-[11.5px] text-ink-faint">
             Tools: V select · H pan · R room · W wall · D door · O object · T token · M marker · E erase. Shift-click adds to the selection, drag on empty space for a marquee, Ctrl+Z / Ctrl+Y undo and redo, Ctrl+D duplicates.
           </p>
@@ -268,14 +295,7 @@ function RoomInspector({ room, play, onStartEncounter, onOpenRecord }: { room: R
         <Section title="Encounters in this room">
           <ul className="space-y-1">
             {encounters.data!.map((enc) => (
-              <li key={enc.id} className="flex items-center gap-2 text-[12.5px]">
-                <Link to={`/encounters/${enc.id}`} className="truncate text-ember-soft hover:underline">
-                  {enc.name}
-                </Link>
-                <Button size="sm" variant="primary" className="ml-auto" onClick={() => onStartEncounter(enc.id, room.id)}>
-                  <Swords size={12} /> Run
-                </Button>
-              </li>
+              <RoomEncounterRow key={enc.id} encounter={enc} roomId={room.id} onStartEncounter={onStartEncounter} />
             ))}
           </ul>
         </Section>
@@ -294,6 +314,9 @@ function RoomInspector({ room, play, onStartEncounter, onOpenRecord }: { room: R
         </Section>
       )}
       <Section title="Items on the floor">
+        {markers.some((m) => m.kind === "treasure" && m.trigger_ref === ROOM_LOOT_REF && m.enabled) && (
+          <p className="mb-1 text-[11.5px] text-gold">Loot marker on the map ($)</p>
+        )}
         {(floorItems.data ?? []).length === 0 && <div className="text-[12px] text-ink-faint">Nothing lying here.</div>}
         <ul className="space-y-0.5 text-[12.5px]">
           {(floorItems.data ?? []).map((i) => (
@@ -616,11 +639,33 @@ function ObjectInspector({ object, play }: { object: MapObject; play: DungeonPla
 
 // ---- token ----
 
+function RoomEncounterRow({ encounter, roomId, onStartEncounter }: { encounter: { id: string; name: string }; roomId: string; onStartEncounter: (id: string, roomId: string) => void }) {
+  const hoard = useInventory({ owner_type: "hoard", owner_id: encounter.id });
+  return (
+    <li className="rounded border border-border px-2 py-1.5 text-[12.5px]">
+      <div className="flex items-center gap-2">
+        <Link to={`/encounters/${encounter.id}`} className="truncate text-ember-soft hover:underline">
+          {encounter.name}
+        </Link>
+        <Button size="sm" variant="primary" className="ml-auto" onClick={() => onStartEncounter(encounter.id, roomId)}>
+          <Swords size={12} /> Run
+        </Button>
+      </div>
+      <div className="mt-0.5 text-[11px] text-ink-faint">
+        {(hoard.data ?? []).length === 0 ? "No hoard yet" : `Hoard: ${(hoard.data ?? []).map((i) => `${i.quantity}× ${i.definition.name}`).join(", ")}`}
+      </div>
+    </li>
+  );
+}
+
 function TokenInspector({ token, play }: { token: Token; play: DungeonPlay }) {
   const mode = useEditor((s) => s.mode);
   const data = useEditor((s) => s.data)!;
   const updateToken = useEditor((s) => s.updateToken);
   const repos = useRepos();
+  const qc = useQueryClient();
+  const live = useQuery({ queryKey: ["encounters", "byToken", token.id], queryFn: () => repos.encounters.findCombatantByToken(token.id) });
+  const liveEntity = useEntity(live.data?.entity_id ?? null);
   const inventory = useInventory(tokenOwner(token));
   const entity = useEntity(token.entity_id);
   const others = data.tokens.filter((t) => t.id !== token.id);
@@ -630,6 +675,26 @@ function TokenInspector({ token, play }: { token: Token; play: DungeonPlay }) {
   return (
     <div key={token.id} className="flex h-full flex-col overflow-y-auto">
       <Header title={token.name} badge={token.kind} />
+      {live.data && (
+        <Section title="Encounter instance">
+          <CombatantSheet
+            combatant={live.data}
+            catalogName={liveEntity.data?.name}
+            catalogKind={liveEntity.data?.kind}
+            editable={true}
+            onPatch={(patch) =>
+              void repos.encounters.updateCombatant(live.data!.id, patch).then((c) => {
+                void qc.invalidateQueries({ queryKey: ["encounters"] });
+                if (c.token_id) void updateToken(c.token_id, { hp: c.hp, max_hp: c.max_hp, conditions: c.conditions.map((x) => x.name) });
+              })
+            }
+            onUseAction={(action, dice) => void repos.encounters.appendLog(live.data!.run_id, formatActionRoll(live.data!.name, action, dice), "action")}
+            onSpendLegendary={() => void repos.encounters.spendLegendary(live.data!.id).then(() => qc.invalidateQueries({ queryKey: ["encounters"] }))}
+            onReset={() => void repos.encounters.resetSheetFromTemplate(live.data!.id).then(() => qc.invalidateQueries({ queryKey: ["encounters"] }))}
+            onDeathSave={() => void repos.encounters.rollDeathSave(live.data!.id).then(() => qc.invalidateQueries({ queryKey: ["encounters"] }))}
+          />
+        </Section>
+      )}
       <Section title="Status">
         <div className="grid grid-cols-4 gap-2">
           <Field label="HP">

@@ -43,8 +43,10 @@ function CreatureBanner({ entity }: { entity: Entity }) {
   return (
     <div className="flex flex-wrap items-center gap-1.5 border-b border-border bg-bg-elevated px-4 py-2">
       {stat("AC", f.ac)}
+      {stat("Initiative", f.initiative ?? "—")}
       {stat("HP", `${f.hp ?? "?"}${f.hp_formula ? ` (${f.hp_formula})` : ""}`)}
       {stat("Speed", f.speed)}
+      {stat("Prof.", f.proficiency_bonus != null ? `+${f.proficiency_bonus}` : "—")}
       {stat("CR", `${f.cr ?? "?"} (${f.xp ?? 0} XP)`)}
       <Badge className="ml-auto">{usage.data ?? 0} encounter(s) use this template</Badge>
     </div>

@@ -1,17 +1,19 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ChevronRight, Dices, Flag, Heart, Map as MapIcon, Minus, Plus, Shield, Skull, X } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router";
 import { toast } from "sonner";
 import { useRepos } from "@/app/appContext";
 import { qk, useAction } from "@/app/queries";
 import { EntityPicker } from "@/components/EntityPicker";
-import { Badge, Button, Checkbox, Dialog, Field, Input, Select, Textarea } from "@/components/ui";
+import { Badge, Button, Checkbox, Dialog, Field, Input, Select, TabPanel, Tabs, Textarea, Tooltip } from "@/components/ui";
 import { d20 } from "@/domain/dice";
+import { CONDITION_REMINDERS, concentrationDc, snapshotSheet } from "@/domain/statblock";
 import type { Combatant, EncounterOutcomes, Entity } from "@/domain/types";
 import { finishEncounter, syncCombatantToToken } from "@/domain/workflows/encounterWorkflow";
 import { cn, errorMessage } from "@/lib/utils";
 import { sortCombatants } from "@/persistence/repositories/encounters";
+import { CombatantSheet, formatActionRoll } from "./CombatantSheet";
 
 const CONDITIONS = ["blinded", "charmed", "deafened", "frightened", "grappled", "incapacitated", "invisible", "paralyzed", "petrified", "poisoned", "prone", "restrained", "stunned", "unconscious", "concentrating"];
 
@@ -26,6 +28,8 @@ export function CombatTracker({ runId, encounter }: { runId: string; encounter: 
   const combatants = useQuery({ queryKey: ["encounters", "combatants", runId], queryFn: () => repos.encounters.combatants(runId) });
   const [finishing, setFinishing] = useState(false);
   const [adding, setAdding] = useState(false);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [rightTab, setRightTab] = useState("sheet");
   const invalidate = [qk.run(runId), ["encounters", "combatants", runId], ["encounters", "runs"], ["dungeon"], ["entities"]];
   const refresh = () => invalidate.forEach((k) => void qc.invalidateQueries({ queryKey: k as unknown[] }));
 
@@ -42,6 +46,36 @@ export function CombatTracker({ runId, encounter }: { runId: string; encounter: 
 
   const begin = () => act(() => repos.encounters.begin(runId));
   const next = () => act(() => repos.encounters.nextTurn(runId));
+  const selected = (combatants.data ?? []).find((c) => c.id === selectedId) ?? null;
+  const selectedEntity = useQuery({
+    queryKey: ["entity", selected?.entity_id ?? null],
+    queryFn: () => repos.entities.find(selected!.entity_id),
+    enabled: !!selected?.entity_id,
+  });
+
+  useEffect(() => {
+    if (!selectedId) return;
+    const prev = (combatants.data ?? []).find((x) => x.id === selectedId);
+    if (prev && Object.keys(prev.sheet).length > 0) return;
+    void repos.encounters.ensureSheet(selectedId).then((c) => {
+      if (Object.keys(c.sheet).length > 0) refresh();
+    });
+  }, [selectedId, combatants.data]);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable)) return;
+      if (e.key.toLowerCase() !== "s" || e.ctrlKey || e.metaKey || e.altKey) return;
+      const currentId = run.data?.status === "active" ? sortCombatants(combatants.data ?? [])[run.data.turn_index % Math.max(1, combatants.data?.length ?? 1)]?.id : null;
+      if (!currentId) return;
+      e.preventDefault();
+      setSelectedId((id) => (id === currentId ? null : currentId));
+      setRightTab("sheet");
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [run.data?.status, run.data?.turn_index, combatants.data]);
   const rollAll = () =>
     act(async () => {
       for (const c of combatants.data ?? []) if (c.initiative === null) await repos.encounters.setInitiative(c.id, d20() + c.initiative_mod);
@@ -101,34 +135,74 @@ export function CombatTracker({ runId, encounter }: { runId: string; encounter: 
           </Button>
         </span>
       </div>
-      <div className="grid grid-cols-[1fr_280px] gap-3 px-4 pb-3">
+      <div className="grid grid-cols-[1fr_340px] gap-3 px-4 pb-3">
         <ul className="space-y-1">
           {ordered.map((c) => (
-            <CombatantRow key={c.id} combatant={c} active={current?.id === c.id} editable={r.status !== "completed" && r.status !== "aborted"} onAct={act} />
+            <CombatantRow
+              key={c.id}
+              combatant={c}
+              active={current?.id === c.id}
+              selected={selectedId === c.id}
+              editable={r.status !== "completed" && r.status !== "aborted"}
+              onAct={act}
+              onSelect={() => {
+                setSelectedId((id) => (id === c.id ? null : c.id));
+                setRightTab("sheet");
+              }}
+            />
           ))}
           {ordered.length === 0 && <li className="text-[12px] text-ink-faint">No combatants.</li>}
         </ul>
-        <div className="max-h-72 overflow-y-auto rounded border border-border bg-bg p-2 text-[11.5px]">
-          <div className="label">Run log</div>
-          {[...r.log].reverse().map((l, i) => (
-            <div key={i} className={cn("py-0.5", l.kind === "round" && "text-ember-soft", l.kind === "damage" && "text-blood", l.kind === "heal" && "text-moss")}>
-              <span className="text-ink-faint">R{l.round} </span>
-              {l.message}
-            </div>
-          ))}
-          {r.log.length === 0 && <div className="text-ink-faint">Nothing yet.</div>}
-          {r.status === "completed" && r.outcomes && Object.keys(r.outcomes).length > 0 && (
-            <div className="mt-2 border-t border-border pt-2">
-              <div className="label">Outcomes applied</div>
-              <ul className="text-ink-muted">
-                {r.outcomes.mark_defeated && <li>Defeated creatures marked</li>}
-                {r.outcomes.room_cleared && <li>Room marked cleared</li>}
-                {r.outcomes.award_treasure && <li>Treasure dropped in room</li>}
-                {r.outcomes.remove_defeated_tokens && <li>Defeated tokens removed</li>}
-                {r.outcomes.notes && <li>{r.outcomes.notes}</li>}
-              </ul>
-            </div>
-          )}
+        <div className="flex max-h-[28rem] flex-col overflow-hidden rounded border border-border bg-bg">
+          <Tabs
+            value={selected ? rightTab : "log"}
+            onValueChange={setRightTab}
+            tabs={[
+              { value: "sheet", label: "Sheet" },
+              { value: "log", label: "Run log" },
+            ]}
+          >
+            <TabPanel value="sheet" className="overflow-y-auto p-2">
+              {selected ? (
+                <CombatantSheet
+                  combatant={selected}
+                  catalogName={selectedEntity.data?.name}
+                  catalogKind={selectedEntity.data?.kind}
+                  editable={r.status !== "completed" && r.status !== "aborted"}
+                  onPatch={(patch) => void act(() => repos.encounters.updateCombatant(selected.id, patch), (x) => x)}
+                  onUseAction={(action, dice) =>
+                    void act(() => repos.encounters.appendLog(runId, formatActionRoll(selected.name, action, dice), "action"))
+                  }
+                  onSpendLegendary={() => void act(() => repos.encounters.spendLegendary(selected.id), (x) => x)}
+                  onReset={() => void act(() => repos.encounters.resetSheetFromTemplate(selected.id), (x) => x)}
+                  onDeathSave={() => void act(() => repos.encounters.rollDeathSave(selected.id), (x) => x)}
+                />
+              ) : (
+                <div className="text-[12px] text-ink-faint">Click a combatant (or press S on the current turn) to open that instance’s sheet.</div>
+              )}
+            </TabPanel>
+            <TabPanel value="log" className="overflow-y-auto p-2 text-[11.5px]">
+              {[...r.log].reverse().map((l, i) => (
+                <div key={i} className={cn("py-0.5", l.kind === "round" && "text-ember-soft", l.kind === "damage" && "text-blood", l.kind === "heal" && "text-moss", l.kind === "action" && "text-violet")}>
+                  <span className="text-ink-faint">R{l.round} </span>
+                  {l.message}
+                </div>
+              ))}
+              {r.log.length === 0 && <div className="text-ink-faint">Nothing yet.</div>}
+              {r.status === "completed" && r.outcomes && Object.keys(r.outcomes).length > 0 && (
+                <div className="mt-2 border-t border-border pt-2">
+                  <div className="label">Outcomes applied</div>
+                  <ul className="text-ink-muted">
+                    {r.outcomes.mark_defeated && <li>Defeated creatures marked</li>}
+                    {r.outcomes.room_cleared && <li>Room marked cleared</li>}
+                    {r.outcomes.award_treasure && <li>Treasure dropped in room</li>}
+                    {r.outcomes.remove_defeated_tokens && <li>Defeated tokens removed</li>}
+                    {r.outcomes.notes && <li>{r.outcomes.notes}</li>}
+                  </ul>
+                </div>
+              )}
+            </TabPanel>
+          </Tabs>
         </div>
       </div>
       <FinishDialog open={finishing} onOpenChange={setFinishing} runId={runId} roomBound={!!r.room_id} hasHoard={true} onDone={() => { refresh(); void qc.invalidateQueries({ queryKey: ["inventory"] }); void qc.invalidateQueries({ queryKey: ["quests"] }); }} />
@@ -137,18 +211,40 @@ export function CombatTracker({ runId, encounter }: { runId: string; encounter: 
   );
 }
 
-function CombatantRow({ combatant: c, active, editable, onAct }: { combatant: Combatant; active: boolean; editable: boolean; onAct: <T>(fn: () => Promise<T>, sync?: (r: T) => Combatant | null) => Promise<void> }) {
+function CombatantRow({
+  combatant: c,
+  active,
+  selected,
+  editable,
+  onAct,
+  onSelect,
+}: {
+  combatant: Combatant;
+  active: boolean;
+  selected: boolean;
+  editable: boolean;
+  onAct: <T>(fn: () => Promise<T>, sync?: (r: T) => Combatant | null) => Promise<void>;
+  onSelect: () => void;
+}) {
   const repos = useRepos();
   const [amount, setAmount] = useState("");
   const [cond, setCond] = useState("");
   const n = Math.max(0, Number(amount) || 0);
   const pct = c.max_hp ? Math.max(0, Math.min(1, c.hp / c.max_hp)) : 0;
   const sync = (x: Combatant) => x;
+  const applyDamage = async () => {
+    const concentrating = c.conditions.some((x) => x.name === "concentrating");
+    await onAct(() => repos.encounters.damage(c.id, n), sync);
+    if (concentrating) toast.warning(`${c.name}: Constitution save DC ${concentrationDc(n)} to keep concentrating.`);
+    setAmount("");
+  };
   return (
-    <li className={cn("rounded border px-2 py-1.5", active ? "border-ember bg-bg-active" : "border-border bg-bg", c.defeated && "opacity-50")}>
+    <li className={cn("rounded border px-2 py-1.5", active ? "border-ember bg-bg-active" : selected ? "border-ember/60 bg-bg-hover" : "border-border bg-bg", c.defeated && "opacity-50")}>
       <div className="flex items-center gap-2 text-[12.5px]">
         <Input type="number" className="w-12 text-center" value={c.initiative ?? ""} placeholder="init" disabled={!editable} onChange={(e) => onAct(() => repos.encounters.setInitiative(c.id, e.target.value === "" ? null : Number(e.target.value)))} />
-        <span className={cn("font-semibold", c.side === "party" ? "text-water" : c.side === "enemy" ? "text-blood" : c.side === "ally" ? "text-moss" : "")}>{c.name}</span>
+        <button type="button" className={cn("text-left font-semibold hover:underline", c.side === "party" ? "text-water" : c.side === "enemy" ? "text-blood" : c.side === "ally" ? "text-moss" : "")} onClick={onSelect} title="Open this instance’s stat sheet">
+          {c.name}
+        </button>
         {c.defeated && <Skull size={12} className="text-ink-faint" />}
         {c.ac !== null && (
           <span className="flex items-center gap-0.5 text-ink-muted">
@@ -166,7 +262,7 @@ function CombatantRow({ combatant: c, active, editable, onAct }: { combatant: Co
           {editable && (
             <>
               <Input type="number" className="w-14" placeholder="n" value={amount} onChange={(e) => setAmount(e.target.value)} />
-              <Button size="sm" variant="danger" disabled={!n} onClick={() => { void onAct(() => repos.encounters.damage(c.id, n), sync); setAmount(""); }} title="Damage">
+              <Button size="sm" variant="danger" disabled={!n} onClick={() => void applyDamage()} title="Damage">
                 <Minus size={11} />
               </Button>
               <Button size="sm" variant="outline" disabled={!n} onClick={() => { void onAct(() => repos.encounters.heal(c.id, n), sync); setAmount(""); }} title="Heal">
@@ -181,10 +277,12 @@ function CombatantRow({ combatant: c, active, editable, onAct }: { combatant: Co
       </div>
       <div className="mt-1 flex flex-wrap items-center gap-1">
         {c.conditions.map((k) => (
-          <button key={k.name} className="chip hover:border-blood hover:text-blood" disabled={!editable} onClick={() => onAct(() => repos.encounters.removeCondition(c.id, k.name), sync)} title="Remove">
-            {k.name}
-            {k.duration !== null ? ` (${k.duration})` : ""} ×
-          </button>
+          <Tooltip key={k.name} content={CONDITION_REMINDERS[k.name] ?? "Click to remove"}>
+            <button className="chip hover:border-blood hover:text-blood" disabled={!editable} onClick={() => onAct(() => repos.encounters.removeCondition(c.id, k.name), sync)}>
+              {k.name}
+              {k.duration !== null ? ` (${k.duration})` : ""} ×
+            </button>
+          </Tooltip>
         ))}
         {editable && (
           <Select value={cond} className="h-6 w-32 text-[11px]" onChange={(e) => { if (e.target.value) { void onAct(() => repos.encounters.addCondition(c.id, { name: e.target.value, duration: null }), sync); setCond(""); } }}>
@@ -259,9 +357,20 @@ function AddCombatantDialog({ open, onOpenChange, runId, onDone }: { open: boole
   const [side, setSide] = useState<Combatant["side"]>("enemy");
   const add = useAction(
     async () => {
-      const f = (entity?.fields ?? {}) as Record<string, unknown>;
-      const max = Number(hp) || Number(f.max_hp ?? f.hp ?? 10) || 10;
-      return repos.encounters.addCombatant(runId, { entity_id: entity?.id ?? null, name: name.trim() || entity?.name || "Combatant", side, hp: max, max_hp: max, ac: Number(f.ac ?? 10) || null, initiative_mod: Math.floor(((Number((f.abilities as Record<string, number> | undefined)?.dex ?? 10) || 10) - 10) / 2) });
+      const sheet = snapshotSheet(entity);
+      const max = Number(hp) || Number(sheet.max_hp ?? sheet.hp ?? 10) || 10;
+      const legendary = Number(sheet.legendary_actions ?? 0) || 0;
+      return repos.encounters.addCombatant(runId, {
+        entity_id: entity?.id ?? null,
+        name: name.trim() || entity?.name || "Combatant",
+        side,
+        hp: max,
+        max_hp: max,
+        ac: sheet.ac !== undefined ? Number(sheet.ac) : null,
+        initiative_mod: Number(sheet.initiative ?? Math.floor(((Number((sheet.abilities as Record<string, number> | undefined)?.dex ?? 10) || 10) - 10) / 2)),
+        resources: legendary ? { legendary, legendary_max: legendary } : {},
+        sheet,
+      });
     },
     { success: "Combatant added", invalidate: [["encounters"]], onSuccess: () => { onOpenChange(false); onDone(); setEntity(null); setName(""); } },
   );

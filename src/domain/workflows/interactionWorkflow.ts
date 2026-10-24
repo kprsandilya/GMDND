@@ -5,6 +5,7 @@ import { evaluateMove, isAdjacent, type MoveContext, type MoveResult } from "../
 import type { Door, DoorState, Effect, MapMarker, MapObject, Room, Token } from "../types";
 import type { Repositories } from "@/persistence/repositories";
 import type { Owner } from "@/persistence/repositories/inventory";
+import { syncRoomLootMarker } from "./lootMarker";
 
 export interface ActionReport {
   ok: boolean;
@@ -337,6 +338,7 @@ export async function tokenItemAction(
       const room = roomAt(data.rooms, token.x, token.y);
       const to: Owner = room ? roomOwner(room) : { owner_type: "unassigned", owner_id: data.floor.id };
       await repos.inventory.transfer({ instance_id: instance.id, quantity: options.quantity, to, note: "dropped" });
+      if (room) await syncRoomLootMarker(repos, room.id);
       await log(`drops ${options.quantity ?? instance.quantity}× ${instance.definition.name}${room ? ` in ${room.entity.name}` : ""}.`);
       return { ok: true, outcome: "done", messages: [`Dropped ${instance.definition.name}.`], triggeredMarkers: [] };
     }
@@ -379,7 +381,9 @@ export async function tokenItemAction(
 export async function pickUpFromRoom(repos: Repositories, options: { campaign_id: string; session_id?: string | null; token_id: string; instance_id: string; quantity?: number }): Promise<ActionReport> {
   const token = await repos.dungeons.getToken(options.token_id);
   const instance = await repos.inventory.getWithDefinition(options.instance_id);
+  const fromRoom = instance.owner_type === "room" ? instance.owner_id : null;
   await repos.inventory.transfer({ instance_id: instance.id, quantity: options.quantity, to: tokenOwner(token), note: "picked up" });
+  if (fromRoom) await syncRoomLootMarker(repos, fromRoom);
   await repos.campaignLog.add(options.campaign_id, "inventory", `${token.name} picks up ${options.quantity ?? instance.quantity}× ${instance.definition.name}.`, { token_id: token.id }, options.session_id ?? null);
   return { ok: true, outcome: "done", messages: [`Picked up ${instance.definition.name}.`], triggeredMarkers: [] };
 }

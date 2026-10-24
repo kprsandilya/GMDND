@@ -27,6 +27,11 @@ export class NodeSqlDriver implements SqlDriver {
   }
 
   async batch(statements: Statement[]): Promise<ExecResult[]> {
+    try {
+      this.db.exec("ROLLBACK");
+    } catch {
+      // already autocommit
+    }
     this.db.exec("BEGIN");
     const results: ExecResult[] = [];
     try {

@@ -6,6 +6,7 @@ import { useRepos } from "@/app/appContext";
 import { qk, useAction, useEntities, useRequiredCampaignId } from "@/app/queries";
 import type { ItemInstanceWithDefinition, OwnerType } from "@/domain/types";
 import type { Owner } from "@/persistence/repositories/inventory";
+import { syncLootIfRoom } from "@/domain/workflows/lootMarker";
 import { EntityPicker } from "./EntityPicker";
 import { Badge, Button, Dialog, Field, Input, Select } from "./ui";
 
@@ -35,10 +36,22 @@ export function InventoryPanel({ owner, title, compact, sessionId }: { owner: Ow
   const items = useInventory(owner);
   const [granting, setGranting] = useState(false);
   const [transferring, setTransferring] = useState<ItemInstanceWithDefinition | null>(null);
-  const invalidate = [["inventory"]];
 
-  const adjust = useAction(({ id, quantity }: { id: string; quantity: number }) => repos.inventory.setQuantity(id, quantity), { invalidate });
-  const destroy = useAction((id: string) => repos.inventory.destroy(id), { success: "Item destroyed", invalidate });
+  const adjust = useAction(
+    async ({ id, quantity }: { id: string; quantity: number }) => {
+      const result = await repos.inventory.setQuantity(id, quantity);
+      await syncLootIfRoom(repos, owner.owner_type, owner.owner_id);
+      return result;
+    },
+    { invalidate: [["inventory"], ["dungeon"]] },
+  );
+  const destroy = useAction(
+    async (id: string) => {
+      await repos.inventory.destroy(id);
+      await syncLootIfRoom(repos, owner.owner_type, owner.owner_id);
+    },
+    { success: "Item destroyed", invalidate: [["inventory"], ["dungeon"]] },
+  );
 
   const total = (items.data ?? []).reduce((s, i) => s + i.quantity, 0);
   const weight = (items.data ?? []).reduce((s, i) => s + i.quantity * Number(i.definition.fields.weight ?? 0), 0);
@@ -96,15 +109,22 @@ function GrantDialog({ open, onOpenChange, owner, campaignId }: { open: boolean;
   const repos = useRepos();
   const [definitionId, setDefinitionId] = useState<string | null>(null);
   const [quantity, setQuantity] = useState(1);
-  const grant = useAction(() => repos.inventory.grant(campaignId, definitionId!, quantity, owner, {}, "granted by DM"), {
-    success: "Item added",
-    invalidate: [["inventory"]],
-    onSuccess: () => {
-      onOpenChange(false);
-      setDefinitionId(null);
-      setQuantity(1);
+  const grant = useAction(
+    async () => {
+      const created = await repos.inventory.grant(campaignId, definitionId!, quantity, owner, {}, "granted by DM");
+      await syncLootIfRoom(repos, owner.owner_type, owner.owner_id);
+      return created;
     },
-  });
+    {
+      success: "Item added",
+      invalidate: [["inventory"], ["dungeon"]],
+      onSuccess: () => {
+        onOpenChange(false);
+        setDefinitionId(null);
+        setQuantity(1);
+      },
+    },
+  );
   return (
     <Dialog
       open={open}
@@ -138,8 +158,14 @@ export function TransferDialog({ item, onClose, sessionId }: { item: ItemInstanc
   const kindsFor: Record<string, Parameters<typeof EntityPicker>[0]["kinds"]> = { character: ["pc", "npc"], room: ["room"], shop: ["shop"], hoard: ["encounter"] };
   const objects = useQuery({ queryKey: ["allObjects", item.campaign_id], queryFn: () => repos.dungeons.objectsForCampaign(item.campaign_id), enabled: ownerType === "object" });
   const move = useAction(
-    () => repos.inventory.transfer({ instance_id: item.id, quantity, to: { owner_type: ownerType, owner_id: needsId || ownerType === "object" ? ownerId : null }, note: "DM transfer", session_id: sessionId ?? null }),
-    { success: `Moved ${quantity} × ${item.definition.name}`, invalidate: [["inventory"]], onSuccess: onClose },
+    async () => {
+      const dest = { owner_type: ownerType, owner_id: needsId || ownerType === "object" ? ownerId : null };
+      const result = await repos.inventory.transfer({ instance_id: item.id, quantity, to: dest, note: "DM transfer", session_id: sessionId ?? null });
+      await syncLootIfRoom(repos, item.owner_type, item.owner_id);
+      await syncLootIfRoom(repos, dest.owner_type, dest.owner_id);
+      return result;
+    },
+    { success: `Moved ${quantity} × ${item.definition.name}`, invalidate: [["inventory"], ["dungeon"]], onSuccess: onClose },
   );
   void useEntities; // keep import for picker kinds typing
   return (

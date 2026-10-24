@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { CURRENT_SCHEMA_VERSION, getSchemaVersion, migrate } from "./migrations";
+import { CURRENT_SCHEMA_VERSION, MIGRATIONS, getSchemaVersion, migrate } from "./migrations";
 import { NodeSqlDriver } from "./nodeDriver";
 import { createRepositories } from "./repositories";
 import { tempDbFile, testRepos } from "./testUtils";
@@ -21,6 +21,19 @@ describe("migrations", () => {
     expect(second.from).toBe(CURRENT_SCHEMA_VERSION);
     const tables = await driver.select<{ name: string }>("SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name");
     expect(tables.map((t) => t.name)).toEqual(expect.arrayContaining(["entities", "entity_links", "rooms", "item_instances", "encounter_runs", "schema_migrations"]));
+  });
+
+  it("applies the combatant sheet column after a leftover BEGIN", async () => {
+    const driver = new NodeSqlDriver();
+    await driver.executeScript(MIGRATIONS[0]!.sql);
+    await getSchemaVersion(driver);
+    await driver.execute("INSERT INTO schema_migrations (version, name, applied_at) VALUES (1, 'initial schema', ?)", [new Date().toISOString()]);
+    driver.db.exec("BEGIN");
+    const result = await migrate(driver);
+    expect(result).toEqual({ from: 1, to: CURRENT_SCHEMA_VERSION });
+    const cols = await driver.select<{ name: string }>("PRAGMA table_info(combatants)");
+    expect(cols.map((c) => c.name)).toContain("sheet");
+    await driver.batch([{ sql: "CREATE TABLE IF NOT EXISTS leftover_tx_check (id TEXT)", params: [] }]);
   });
 
   it("enforces foreign keys", async () => {

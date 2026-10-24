@@ -32,8 +32,10 @@ function StatBanner({ entity }: { entity: Entity }) {
   return (
     <div className="flex flex-wrap gap-1.5 border-b border-border bg-bg-elevated px-4 py-2">
       {stat("AC", f.ac)}
-      {stat("HP", `${f.hp ?? "?"}/${f.max_hp ?? "?"}`)}
+      {stat("Initiative", f.initiative ?? "—")}
       {stat("Speed", `${f.speed ?? 30} ft`)}
+      {stat("HP", `${f.hp ?? "?"}/${f.max_hp ?? "?"}`)}
+      {stat("Prof.", f.proficiency_bonus != null ? `+${f.proficiency_bonus}` : "—")}
       {stat("Passive Perc.", f.passive_perception)}
       {entity.kind === "npc" && (
         <div className="ml-auto flex items-center gap-1">

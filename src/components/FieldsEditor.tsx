@@ -4,9 +4,95 @@ import type { EntityKind } from "@/domain/types";
 import { Checkbox, Field, Input, Select, Textarea } from "./ui";
 import { EntityPicker } from "./EntityPicker";
 
-const LONG_TEXT = new Set(["skills", "attacks", "features", "traits", "actions", "reactions", "legendary", "goals", "resources", "hook", "consequences", "reward", "effects", "restrictions", "properties", "notable_features", "rumors", "services", "history", "inhabitants", "entrance", "reinforcements", "treasure", "alternative_outcomes", "conditional_events", "effect", "trigger", "reveal_condition", "motive", "voice", "saves", "senses", "languages", "resistances", "immunities"]);
+const LONG_TEXT = new Set([
+  "skills",
+  "skill_proficiencies",
+  "save_proficiencies",
+  "attacks",
+  "features",
+  "additional_features",
+  "traits",
+  "actions",
+  "bonus_actions",
+  "reactions",
+  "legendary",
+  "lair",
+  "mythic",
+  "goals",
+  "resources",
+  "hook",
+  "consequences",
+  "reward",
+  "effects",
+  "restrictions",
+  "properties",
+  "notable_features",
+  "rumors",
+  "services",
+  "history",
+  "inhabitants",
+  "entrance",
+  "reinforcements",
+  "treasure",
+  "alternative_outcomes",
+  "conditional_events",
+  "effect",
+  "trigger",
+  "reveal_condition",
+  "motive",
+  "voice",
+  "saves",
+  "senses",
+  "languages",
+  "other_proficiencies",
+  "resistances",
+  "immunities",
+  "vulnerabilities",
+  "condition_immunities",
+  "personality_traits",
+  "ideals",
+  "bonds",
+  "flaws",
+  "appearance",
+  "allies",
+  "backstory",
+  "treasure_notes",
+  "equipment",
+  "spells",
+  "spell_slots",
+  "ac_notes",
+]);
 const HIDDEN = new Set(["party_location_id", "active_session_id", "is_demo", "calendar", "planned_encounter_ids", "location_ids", "started_at", "ended_at", "outline_md", "recap_md", "rewards_md", "revealed_at"]);
 const PICKERS: Record<string, EntityKind[]> = { giver_id: ["npc", "pc", "faction"], leader_id: ["npc", "pc"], headquarters_id: ["settlement", "building", "location", "dungeon", "district"] };
+
+const CHARACTER_GROUPS: { title: string; keys: string[] }[] = [
+  { title: "Identity", keys: ["race", "class", "level", "background", "alignment", "xp", "player_name"] },
+  { title: "Combat", keys: ["inspiration", "proficiency_bonus", "ac", "initiative", "speed", "hp", "max_hp", "temp_hp", "hit_dice", "hit_dice_current"] },
+  { title: "Ability scores", keys: ["abilities"] },
+  { title: "Saving throws & skills", keys: ["save_proficiencies", "saves", "skill_proficiencies", "skills", "passive_perception", "other_proficiencies", "languages"] },
+  { title: "Attacks & spellcasting", keys: ["weapon1_name", "weapon1_atk", "weapon1_damage", "weapon2_name", "weapon2_atk", "weapon2_damage", "weapon3_name", "weapon3_atk", "weapon3_damage", "attacks", "spellcasting_class", "spellcasting_ability", "spell_save_dc", "spell_attack_bonus", "spell_slots", "spells"] },
+  { title: "Features & traits", keys: ["features", "additional_features"] },
+  { title: "Personality", keys: ["personality_traits", "ideals", "bonds", "flaws"] },
+  { title: "Appearance & story", keys: ["age", "height", "weight", "eyes", "skin", "hair", "appearance", "allies", "faction", "backstory", "treasure_notes", "equipment"] },
+  { title: "Coins", keys: ["cp", "sp", "ep", "gp", "pp"] },
+  { title: "NPC", keys: ["occupation", "motive", "voice", "attitude"] },
+];
+
+const CREATURE_GROUPS: { title: string; keys: string[] }[] = [
+  { title: "Identity", keys: ["size", "type", "alignment", "cr", "xp", "proficiency_bonus"] },
+  { title: "Combat", keys: ["ac", "ac_notes", "initiative", "speed", "hp", "max_hp", "hp_formula", "temp_hp", "hit_dice", "inspiration"] },
+  { title: "Ability scores", keys: ["abilities"] },
+  { title: "Saves, skills & senses", keys: ["save_proficiencies", "saves", "skill_proficiencies", "skills", "passive_perception", "senses", "languages", "other_proficiencies"] },
+  { title: "Defenses", keys: ["vulnerabilities", "resistances", "immunities", "condition_immunities"] },
+  { title: "Attacks & spellcasting", keys: ["weapon1_name", "weapon1_atk", "weapon1_damage", "weapon2_name", "weapon2_atk", "weapon2_damage", "weapon3_name", "weapon3_atk", "weapon3_damage", "attacks", "actions", "bonus_actions", "reactions", "spellcasting_class", "spellcasting_ability", "spell_save_dc", "spell_attack_bonus", "spell_slots", "spells"] },
+  { title: "Traits & legendary", keys: ["traits", "legendary", "legendary_actions", "legendary_resistances", "lair", "mythic"] },
+];
+
+const FIELD_GROUPS: Partial<Record<EntityKind, { title: string; keys: string[] }[]>> = {
+  pc: CHARACTER_GROUPS,
+  npc: CHARACTER_GROUPS,
+  creature: CREATURE_GROUPS,
+};
 
 function unwrap(schema: z.ZodTypeAny): z.ZodTypeAny {
   let s: z.ZodTypeAny = schema;
@@ -27,7 +113,22 @@ function enumValues(schema: z.ZodTypeAny): string[] {
   return def?.entries ? Object.values(def.entries) : [];
 }
 
-const titleCase = (key: string) => key.replace(/_id$/, "").replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()).replace(/\bHp\b/, "HP").replace(/\bAc\b/, "AC").replace(/\bCr\b/, "CR").replace(/\bXp\b/, "XP").replace(/\bDc\b/, "DC").replace(/\bGp\b/, "GP");
+const titleCase = (key: string) =>
+  key
+    .replace(/_id$/, "")
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (c) => c.toUpperCase())
+    .replace(/\bHp\b/, "HP")
+    .replace(/\bAc\b/, "AC")
+    .replace(/\bCr\b/, "CR")
+    .replace(/\bXp\b/, "XP")
+    .replace(/\bDc\b/, "DC")
+    .replace(/\bGp\b/, "GP")
+    .replace(/\bCp\b/, "CP")
+    .replace(/\bSp\b/, "SP")
+    .replace(/\bEp\b/, "EP")
+    .replace(/\bPp\b/, "PP")
+    .replace(/\bAtk\b/, "Atk");
 
 /** Generates a form for a kind's Zod field schema; unknown shapes fall back to JSON text. */
 export function FieldsEditor({ kind, value, onChange }: { kind: EntityKind; value: Record<string, unknown>; onChange: (next: Record<string, unknown>) => void }) {
@@ -36,10 +137,7 @@ export function FieldsEditor({ kind, value, onChange }: { kind: EntityKind; valu
   const shape = (schema as z.ZodObject<z.ZodRawShape>).shape;
   const set = (key: string, v: unknown) => onChange({ ...value, [key]: v });
 
-  const entries = Object.entries(shape).filter(([key]) => !HIDDEN.has(key));
-  return (
-    <div className="grid grid-cols-2 gap-x-3 gap-y-2">
-      {entries.map(([key, raw]) => {
+  const renderField = (key: string, raw: z.ZodTypeAny) => {
         const inner = unwrap(raw as z.ZodTypeAny);
         const type = typeOf(inner);
         const label = titleCase(key);
@@ -90,7 +188,7 @@ export function FieldsEditor({ kind, value, onChange }: { kind: EntityKind; valu
             </Field>
           );
         }
-        if (type === "string") {
+        if (type === "union" || type === "string") {
           if (LONG_TEXT.has(key)) {
             return (
               <Field key={key} label={label} className="col-span-2">
@@ -120,7 +218,28 @@ export function FieldsEditor({ kind, value, onChange }: { kind: EntityKind; valu
             />
           </Field>
         );
-      })}
+  };
+
+  const groups = FIELD_GROUPS[kind];
+  const used = new Set<string>();
+  const grouped = (groups ?? [{ title: "", keys: Object.keys(shape).filter((k) => !HIDDEN.has(k)) }]).map((group) => ({
+    ...group,
+    keys: group.keys.filter((key) => key in shape && !HIDDEN.has(key)),
+  })).filter((group) => group.keys.length > 0);
+  grouped.forEach((group) => group.keys.forEach((key) => used.add(key)));
+  const leftover = Object.keys(shape).filter((key) => !HIDDEN.has(key) && !used.has(key));
+  if (leftover.length) grouped.push({ title: "Other", keys: leftover });
+
+  return (
+    <div className="space-y-4">
+      {grouped.map((group) => (
+        <div key={group.title || "fields"}>
+          {group.title ? <div className="label mb-1.5">{group.title}</div> : null}
+          <div className="grid grid-cols-2 gap-x-3 gap-y-2">
+            {group.keys.map((key) => renderField(key, shape[key] as z.ZodTypeAny))}
+          </div>
+        </div>
+      ))}
     </div>
   );
 }
@@ -133,7 +252,7 @@ export function FieldsSummary({ kind, fields }: { kind: EntityKind; fields: Reco
   const rows = Object.keys(shape)
     .filter((k) => !HIDDEN.has(k) && k !== "abilities")
     .map((k) => [k, fields[k]] as const)
-    .filter(([, v]) => v !== "" && v !== null && v !== undefined && v !== false && !(typeof v === "number" && v === 0 && false));
+    .filter(([, v]) => v !== "" && v !== null && v !== undefined && v !== false && !(typeof v === "number" && v === 0));
   const abilities = fields.abilities as Record<string, number> | undefined;
   return (
     <div className="space-y-2">
