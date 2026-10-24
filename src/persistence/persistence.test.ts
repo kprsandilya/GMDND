@@ -81,6 +81,30 @@ describe("entities", () => {
     expect(hits.map((h) => h.entity.id)).toEqual(expect.arrayContaining([npc.id, faction.id]));
   });
 
+  it("scopes list() to one campaign and only includes shared records on request", async () => {
+    const { repos } = await testRepos();
+    const campA = await repos.entities.create({ kind: "campaign", name: "A" });
+    const campB = await repos.entities.create({ kind: "campaign", name: "B" });
+    const goblinA = await repos.entities.create({ kind: "creature", name: "Goblin A", campaign_id: campA.id });
+    await repos.entities.create({ kind: "creature", name: "Goblin B", campaign_id: campB.id });
+    // A shared library record (campaign-independent, e.g. an SRD creature).
+    await repos.entities.create({ kind: "creature", name: "SRD Orc", campaign_id: null, fields: { source: "srd-2024" } });
+
+    // Default: only the active campaign's records — no other campaign, no shared library.
+    const onlyA = await repos.entities.list({ campaign_id: campA.id, kinds: ["creature"] });
+    expect(onlyA.map((e) => e.name)).toEqual(["Goblin A"]);
+
+    // include_shared adds the library but still excludes other campaigns.
+    const aPlusShared = await repos.entities.list({ campaign_id: campA.id, kinds: ["creature"], include_shared: true });
+    expect(aPlusShared.map((e) => e.name).sort()).toEqual(["Goblin A", "SRD Orc"]);
+    expect(aPlusShared.some((e) => e.name === "Goblin B")).toBe(false);
+
+    // The same scoping holds for campaign B (consistency across campaigns).
+    const onlyB = await repos.entities.list({ campaign_id: campB.id, kinds: ["creature"] });
+    expect(onlyB.map((e) => e.name)).toEqual(["Goblin B"]);
+    void goblinA;
+  });
+
   it("walks the geographic hierarchy", async () => {
     const { repos } = await testRepos();
     const c = await repos.entities.create({ kind: "campaign", name: "C" });

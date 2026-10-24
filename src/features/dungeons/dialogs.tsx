@@ -124,7 +124,7 @@ export function PlaceTokenDialog({ cell, onClose, onPlace }: { cell: { x: number
             ))}
           </div>
           <Field label="Or pick any character / creature">
-            <EntityPicker kinds={["pc", "npc", "creature"]} value={entityId} onChange={(id, e) => { setEntityId(id); setEntity(e); }} />
+            <EntityPicker kinds={["pc", "npc", "creature"]} value={entityId} onChange={(id, e) => { setEntityId(id); setEntity(e); }} includeGlobal />
           </Field>
           <Field label="Token label (optional)">
             <Input value={name} onChange={(e) => setName(e.target.value)} placeholder={entity?.name ?? ""} />

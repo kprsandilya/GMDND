@@ -57,7 +57,10 @@ export function useEntity(id: string | null | undefined, options?: Partial<UseQu
 export function useEntities(query: EntityQuery, options?: { enabled?: boolean }) {
   const repos = useRepos();
   const campaignId = useCampaignId();
-  const merged: EntityQuery = { campaign_id: campaignId, ...query };
+  // Default to the active campaign. A caller may override the scope by passing a concrete
+  // `campaign_id` (e.g. null for shared-only), but an *undefined* value must NOT wipe the default —
+  // otherwise the query would silently return records from every campaign.
+  const merged: EntityQuery = { ...query, campaign_id: "campaign_id" in query && query.campaign_id !== undefined ? query.campaign_id : campaignId };
   return useQuery({ queryKey: qk.entities(campaignId, merged), queryFn: () => repos.entities.list(merged), enabled: (options?.enabled ?? true) && !!campaignId });
 }
 

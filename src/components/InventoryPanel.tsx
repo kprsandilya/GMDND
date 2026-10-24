@@ -139,7 +139,7 @@ function GrantDialog({ open, onOpenChange, owner, campaignId }: { open: boolean;
     >
       <div className="space-y-2">
         <Field label="Item definition">
-          <EntityPicker kinds={["item"]} value={definitionId} onChange={(id) => setDefinitionId(id)} />
+          <EntityPicker kinds={["item"]} value={definitionId} onChange={(id) => setDefinitionId(id)} includeGlobal />
         </Field>
         <Field label="Quantity">
           <Input type="number" min={1} value={quantity} onChange={(e) => setQuantity(Math.max(1, Number(e.target.value)))} />

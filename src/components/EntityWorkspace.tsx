@@ -27,12 +27,26 @@ export interface WorkspaceProps {
    * Standard/Custom source filter. Used by Creatures and Items & Equipment.
    */
   library?: boolean;
+  /** Extra dropdown filters (e.g. item category/rarity, creature CR/type). Applied client-side. */
+  filters?: WorkspaceFilter[];
 }
 
 type SourceFilter = "all" | "custom" | "standard";
 
+/** A dropdown filter over a derived value of each entity (usually a JSON field). */
+export interface WorkspaceFilter {
+  key: string;
+  label: string;
+  /** Returns the filterable value for an entity (normalised to a string); "" means "no value". */
+  get: (e: Entity) => string;
+  /** Optional fixed option list; when omitted, options are derived from the current rows. */
+  options?: { value: string; label: string }[];
+  /** Optional ordering for derived options (defaults to numeric-aware alphabetical). */
+  sort?: (a: string, b: string) => number;
+}
+
 /** Master/detail layout shared by most modules: filterable list on the left, EntityDetail on the right. */
-export function EntityWorkspace({ title, kinds, basePath, description, extras, rowMeta, groupBy, emptyHint, overview, library }: WorkspaceProps) {
+export function EntityWorkspace({ title, kinds, basePath, description, extras, rowMeta, groupBy, emptyHint, overview, library, filters }: WorkspaceProps) {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const width = useAppStore((s) => s.settings.listPanelWidth);
@@ -40,6 +54,7 @@ export function EntityWorkspace({ title, kinds, basePath, description, extras, r
   const [term, setTerm] = useState("");
   const [kindFilter, setKindFilter] = useState<EntityKind | "all">("all");
   const [sourceFilter, setSourceFilter] = useState<SourceFilter>("all");
+  const [facets, setFacets] = useState<Record<string, string>>({});
   const [creating, setCreating] = useState(false);
   const list = useEntities({
     kinds: kindFilter === "all" ? kinds : [kindFilter],
@@ -48,11 +63,37 @@ export function EntityWorkspace({ title, kinds, basePath, description, extras, r
     source: library ? sourceFilter : undefined,
   });
 
+  // Build each facet's option list from the rows currently returned (before facet filtering), so
+  // the choices reflect what actually exists in this campaign (plus the library when included).
+  const facetOptions = useMemo(() => {
+    const rows = list.data ?? [];
+    const map: Record<string, { value: string; label: string }[]> = {};
+    for (const f of filters ?? []) {
+      if (f.options) {
+        map[f.key] = f.options;
+        continue;
+      }
+      const seen = new Set<string>();
+      for (const e of rows) {
+        const v = f.get(e);
+        if (v) seen.add(v);
+      }
+      const sort = f.sort ?? ((a: string, b: string) => a.localeCompare(b, undefined, { numeric: true }));
+      map[f.key] = [...seen].sort(sort).map((v) => ({ value: v, label: v }));
+    }
+    return map;
+  }, [list.data, filters]);
+
   const filtered = useMemo(() => {
     const t = term.trim().toLowerCase();
-    const items = list.data ?? [];
-    return t ? items.filter((e) => e.name.toLowerCase().includes(t) || e.summary.toLowerCase().includes(t) || e.tags.some((tag) => tag.toLowerCase().includes(t))) : items;
-  }, [list.data, term]);
+    let items = list.data ?? [];
+    if (t) items = items.filter((e) => e.name.toLowerCase().includes(t) || e.summary.toLowerCase().includes(t) || e.tags.some((tag) => tag.toLowerCase().includes(t)));
+    for (const f of filters ?? []) {
+      const selected = facets[f.key];
+      if (selected) items = items.filter((e) => f.get(e) === selected);
+    }
+    return items;
+  }, [list.data, term, filters, facets]);
 
   const groups = useMemo(() => {
     const fn = groupBy ?? (kinds.length > 1 ? (e: Entity) => KIND_LABELS[e.kind] : null);
@@ -101,6 +142,31 @@ export function EntityWorkspace({ title, kinds, basePath, description, extras, r
                 </Select>
               )}
             </div>
+            {(filters?.length ?? 0) > 0 && (
+              <div className="flex shrink-0 flex-wrap items-center gap-1.5 border-b border-border px-2 pb-2">
+                {(filters ?? []).map((f) => (
+                  <Select
+                    key={f.key}
+                    value={facets[f.key] ?? ""}
+                    onChange={(e) => setFacets((prev) => ({ ...prev, [f.key]: e.target.value }))}
+                    className="w-auto min-w-[7rem] grow"
+                    title={`Filter by ${f.label.toLowerCase()}`}
+                  >
+                    <option value="">All {f.label.toLowerCase()}</option>
+                    {(facetOptions[f.key] ?? []).map((o) => (
+                      <option key={o.value} value={o.value}>
+                        {o.label}
+                      </option>
+                    ))}
+                  </Select>
+                ))}
+                {Object.values(facets).some(Boolean) && (
+                  <Button variant="ghost" size="sm" onClick={() => setFacets({})} title="Clear filters">
+                    Clear
+                  </Button>
+                )}
+              </div>
+            )}
             <div className="min-h-0 flex-1 overflow-y-auto py-1">
               {filtered.length === 0 && !list.isLoading && <div className="p-4 text-center text-[12px] text-ink-faint">{emptyHint ?? "Nothing here yet."}</div>}
               {groups.map((g) => (

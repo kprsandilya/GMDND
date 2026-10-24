@@ -1,9 +1,31 @@
 import { useQuery } from "@tanstack/react-query";
 import { useRepos } from "@/app/appContext";
 import { useCampaignId } from "@/app/queries";
-import { EntityWorkspace } from "@/components/EntityWorkspace";
+import { EntityWorkspace, type WorkspaceFilter } from "@/components/EntityWorkspace";
 import { Badge } from "@/components/ui";
 import type { Entity } from "@/domain/types";
+
+/** Numeric value of a 5e challenge rating string ("1/8" → 0.125) for ordering. */
+function crValue(cr: string): number {
+  const t = cr.trim();
+  if (t.includes("/")) {
+    const [a, b] = t.split("/");
+    return Number(a) / Number(b || 1);
+  }
+  const n = Number(t);
+  return Number.isFinite(n) ? n : Number.POSITIVE_INFINITY;
+}
+
+const field = (e: Entity, key: string): string => {
+  const v = e.fields[key];
+  return v === null || v === undefined ? "" : String(v).trim();
+};
+
+const CREATURE_FILTERS: WorkspaceFilter[] = [
+  { key: "cr", label: "CR", get: (e) => field(e, "cr"), sort: (a, b) => crValue(a) - crValue(b) },
+  { key: "type", label: "type", get: (e) => field(e, "type").toLowerCase() },
+  { key: "size", label: "size", get: (e) => field(e, "size") },
+];
 
 export function CreaturesPage() {
   return (
@@ -12,6 +34,7 @@ export function CreaturesPage() {
       kinds={["creature"]}
       basePath="/creatures"
       library
+      filters={CREATURE_FILTERS}
       description="Monster and NPC stat block templates. The standard SRD 2024 bestiary is available in every campaign; your own creatures are 'Custom'. Encounters reference these; combat changes only the instance, never the template."
       rowMeta={(e) => `CR ${e.fields.cr ?? "?"} · ${e.fields.size ?? ""} ${e.fields.type ?? ""}`}
       extras={{ banner: (e) => <CreatureBanner entity={e} /> }}

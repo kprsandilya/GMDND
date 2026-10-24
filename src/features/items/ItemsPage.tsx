@@ -3,9 +3,36 @@ import { Link } from "react-router";
 import { useRepos } from "@/app/appContext";
 import { useCampaignId } from "@/app/queries";
 import { routeForEntity } from "@/app/routes";
-import { EntityWorkspace } from "@/components/EntityWorkspace";
+import { EntityWorkspace, type WorkspaceFilter } from "@/components/EntityWorkspace";
 import { Badge } from "@/components/ui";
+import { ITEM_RARITIES } from "@/domain/schemas";
 import type { Entity, ItemInstance } from "@/domain/types";
+
+const field = (e: Entity, key: string): string => {
+  const v = e.fields[key];
+  return v === null || v === undefined ? "" : String(v).trim();
+};
+
+const RARITY_ORDER = new Map(ITEM_RARITIES.map((r, i) => [r, i] as const));
+
+const ITEM_FILTERS: WorkspaceFilter[] = [
+  { key: "category", label: "category", get: (e) => (e.kind === "item" ? field(e, "category") : "") },
+  {
+    key: "rarity",
+    label: "rarity",
+    get: (e) => (e.kind === "item" ? field(e, "rarity") : ""),
+    sort: (a, b) => (RARITY_ORDER.get(a as never) ?? 99) - (RARITY_ORDER.get(b as never) ?? 99),
+  },
+  {
+    key: "magical",
+    label: "type",
+    get: (e) => (e.kind === "item" ? (e.fields.magical ? "Magical" : "Mundane") : ""),
+    options: [
+      { value: "Magical", label: "Magical" },
+      { value: "Mundane", label: "Mundane" },
+    ],
+  },
+];
 
 export function ItemsPage() {
   return (
@@ -14,6 +41,7 @@ export function ItemsPage() {
       kinds={["item", "spell"]}
       basePath="/items"
       library
+      filters={ITEM_FILTERS}
       description="Item definitions are templates. The standard SRD 2024 items and magic items are available in every campaign; your own entries are 'Custom'. Physical copies live as instances in character, room, container, shop or hoard inventories."
       rowMeta={(e) => (e.kind === "item" ? `${e.fields.category ?? ""} · ${e.fields.rarity ?? ""}${e.fields.magical ? " · magical" : ""}` : `Level ${e.fields.level ?? 0} ${e.fields.school ?? ""}`)}
       extras={{

@@ -178,7 +178,7 @@ function Participants({ encounter }: { encounter: Entity }) {
       </ul>
       <div className="flex items-end gap-2">
         <Field label="Creature / NPC" className="flex-1">
-          <EntityPicker kinds={["creature", "npc"]} value={entityId} onChange={(id) => setEntityId(id)} />
+          <EntityPicker kinds={["creature", "npc"]} value={entityId} onChange={(id) => setEntityId(id)} includeGlobal />
         </Field>
         <Field label="Count">
           <Input type="number" min={1} className="w-16" value={count} onChange={(e) => setCount(Math.max(1, Number(e.target.value)))} />

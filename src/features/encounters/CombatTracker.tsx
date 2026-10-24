@@ -378,7 +378,7 @@ function AddCombatantDialog({ open, onOpenChange, runId, onDone }: { open: boole
     <Dialog open={open} onOpenChange={onOpenChange} title="Add combatant" width="max-w-sm" footer={<Button variant="primary" onClick={() => add.mutate(undefined as never)}>Add</Button>}>
       <div className="space-y-2">
         <Field label="From record (optional)">
-          <EntityPicker kinds={["creature", "npc", "pc"]} value={entity?.id ?? null} onChange={(_, e) => { setEntity(e); if (e) setHp(String(e.fields.max_hp ?? e.fields.hp ?? 10)); }} allowNone />
+          <EntityPicker kinds={["creature", "npc", "pc"]} value={entity?.id ?? null} onChange={(_, e) => { setEntity(e); if (e) setHp(String(e.fields.max_hp ?? e.fields.hp ?? 10)); }} allowNone includeGlobal />
         </Field>
         <Field label="Name">
           <Input value={name} onChange={(e) => setName(e.target.value)} placeholder={entity?.name ?? ""} />
