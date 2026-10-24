@@ -1,5 +1,4 @@
 import { Route, Routes } from "react-router";
-import { AtlasPage } from "@/features/atlas/AtlasPage";
 import { CampaignsPage } from "@/features/campaigns/CampaignsPage";
 import { CharactersPage } from "@/features/characters/CharactersPage";
 import { CreaturesPage } from "@/features/creatures/CreaturesPage";
@@ -22,8 +21,8 @@ export function AppRoutes() {
       <Route element={<Shell />}>
         <Route index element={<DashboardPage />} />
         <Route path="campaigns" element={<CampaignsPage />} />
-        <Route path="atlas" element={<AtlasPage />} />
-        <Route path="atlas/:mapId" element={<AtlasPage />} />
+        <Route path="atlas" element={null} />
+        <Route path="atlas/:mapId" element={null} />
         <Route path="locations" element={<LocationsPage />} />
         <Route path="locations/:id" element={<LocationsPage />} />
         <Route path="dungeons" element={<DungeonsPage />} />

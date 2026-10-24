@@ -18,8 +18,9 @@ import {
   Users,
   type LucideIcon,
 } from "lucide-react";
-import { useEffect } from "react";
-import { NavLink, Outlet, useNavigate } from "react-router";
+import { useEffect, useState } from "react";
+import { NavLink, Outlet, useLocation, useNavigate } from "react-router";
+import { AtlasPage } from "@/features/atlas/AtlasPage";
 import { Kbd, Tooltip } from "@/components/ui";
 import { cn, modKey } from "@/lib/utils";
 import { useAppStore } from "./appStore";
@@ -35,6 +36,13 @@ export function Shell() {
   const setPalette = useAppStore((s) => s.setCommandPaletteOpen);
   const campaign = useCampaign();
   const navigate = useNavigate();
+  const location = useLocation();
+  const atlasActive = location.pathname === "/atlas" || location.pathname.startsWith("/atlas/");
+  const [atlasMounted, setAtlasMounted] = useState(atlasActive);
+
+  useEffect(() => {
+    if (atlasActive) setAtlasMounted(true);
+  }, [atlasActive]);
 
   // Global shortcuts: Ctrl+K palette, Ctrl+1..9 navigation, Ctrl+Shift+F search.
   useEffect(() => {
@@ -125,8 +133,18 @@ export function Shell() {
           )}
         </button>
       </nav>
-      <main className="flex min-w-0 flex-1 flex-col bg-bg">
-        <Outlet />
+      <main className="relative flex min-w-0 flex-1 flex-col bg-bg">
+        {atlasMounted && (
+          <div
+            className={cn("min-h-0 flex-col", atlasActive ? "flex flex-1" : "pointer-events-none invisible absolute inset-0 flex")}
+            aria-hidden={!atlasActive}
+          >
+            <AtlasPage key={campaign.data?.id ?? "none"} active={atlasActive} />
+          </div>
+        )}
+        <div className={cn("min-h-0 flex-1 flex-col", atlasActive ? "hidden" : "flex")}>
+          <Outlet />
+        </div>
       </main>
       <CommandPalette />
     </div>

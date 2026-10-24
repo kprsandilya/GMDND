@@ -87,7 +87,10 @@ export interface FmgWindow extends Window {
   zoomTo?: (x: number, y: number, z?: number, duration?: number) => void;
   Services?: {
     Save: { prepareMapData: (viewOnly?: boolean) => Promise<string> };
-    Load: { uploadMap: (file: Blob, callback?: () => void) => Promise<void> };
+    Load: {
+      uploadMap: (file: Blob, callback?: () => void) => Promise<void> | void;
+      loadMapFromURL?: (maplink: string, random?: boolean) => Promise<void>;
+    };
   };
   VERSION?: string;
   options?: { map?: { seed?: string; graph?: { width: number; height: number } } };
@@ -105,6 +108,24 @@ export function fmgWindow(frame: HTMLIFrameElement | null): FmgWindow | null {
 
 export function isReady(win: FmgWindow | null): boolean {
   return !!win?.pack?.cells?.p?.length && !!win.pack.burgs;
+}
+
+export function waitForServices(frame: HTMLIFrameElement, timeoutMs = 60_000): Promise<FmgWindow> {
+  return new Promise((resolve, reject) => {
+    const started = Date.now();
+    const tick = () => {
+      const win = fmgWindow(frame);
+      if (win?.Services?.Load?.uploadMap) return resolve(win);
+      if (Date.now() - started > timeoutMs) return reject(new Error("The map generator did not start."));
+      setTimeout(tick, 80);
+    };
+    tick();
+  });
+}
+
+/** Stop Azgaar's ?maplink= follow-up from generating a random world if our upload already won. */
+export function suppressFollowupMapLink(win: FmgWindow): void {
+  if (win.Services?.Load) win.Services.Load.loadMapFromURL = async () => undefined;
 }
 
 /** Waits until the generator has a map in memory. */

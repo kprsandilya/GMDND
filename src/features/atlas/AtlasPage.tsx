@@ -1,7 +1,7 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Crosshair, Download, ExternalLink, Eye, EyeOff, FolderOpen, Link2, Link2Off, Map as MapIcon, Pencil, Plus, RefreshCw, Save, Search, Trash2, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useNavigate, useParams, useSearchParams } from "react-router";
+import { useLocation, useNavigate, useSearchParams } from "react-router";
 import { toast } from "sonner";
 import { useRepos } from "@/app/appContext";
 import { useAppStore } from "@/app/appStore";
@@ -14,23 +14,35 @@ import { Badge, Button, Checkbox, ConfirmDialog, Dialog, EmptyState, Field, Inpu
 import { GEOGRAPHIC_KINDS, type Entity, type EntityKind, type MapAnnotation, type MapFeatureLink, type WorldMap } from "@/domain/types";
 import { cn, errorMessage } from "@/lib/utils";
 import { DEMO_MAP_SEED } from "@/seed/demoCampaign";
-import { dismissUpdateDialog, exportMapData, featureAt, iframeClientToMap, installExternalLinkHook, listFeatures, loadMapData, renderOverlay, waitForMap, zoomScaleFor, zoomTo, type FmgFeature, type FmgWindow } from "./fmgBridge";
+import { fmgSrc, forgetMapText, recalledMapText, rememberMapText } from "./atlasCache";
+import { dismissUpdateDialog, exportMapData, featureAt, iframeClientToMap, installExternalLinkHook, listFeatures, loadMapData, renderOverlay, suppressFollowupMapLink, waitForMap, waitForServices, zoomScaleFor, zoomTo, type FmgFeature, type FmgWindow } from "./fmgBridge";
 
 const ANNOTATION_COLORS: Record<MapAnnotation["kind"], string> = { poi: "#d9a441", note: "#8fb3c9", secret: "#b58cf0", quest: "#e0893f", encounter: "#c4524a", danger: "#ff5a5a" };
 const LINK_COLOR = "#f0c674";
 
-export function AtlasPage() {
+export function AtlasPage({ active = true }: { active?: boolean }) {
   const repos = useRepos();
   const campaignId = useCampaignId();
   const navigate = useNavigate();
-  const { mapId } = useParams();
+  const { pathname } = useLocation();
+  const routeMapId = pathname.match(/^\/atlas\/([^/]+)/)?.[1];
+  const [mapId, setMapId] = useState(routeMapId);
+  useEffect(() => {
+    if (routeMapId) setMapId(routeMapId);
+  }, [routeMapId]);
   const listWidth = useAppStore((s) => s.settings.listPanelWidth);
   const maps = useQuery({ queryKey: qk.worldMaps(campaignId), queryFn: () => repos.worldMaps.list(campaignId!), enabled: !!campaignId });
   const [creating, setCreating] = useState(false);
+  const [openIds, setOpenIds] = useState<string[]>([]);
 
   useEffect(() => {
+    if (!active) return;
     if (!mapId && maps.data?.length) navigate(`/atlas/${maps.data[0]!.id}`, { replace: true });
-  }, [mapId, maps.data, navigate]);
+  }, [active, mapId, maps.data, navigate]);
+
+  useEffect(() => {
+    if (mapId) setOpenIds((ids) => (ids.includes(mapId) ? ids : [...ids, mapId]));
+  }, [mapId]);
 
   if (!campaignId) return <EmptyState title="No campaign selected" />;
 
@@ -58,7 +70,14 @@ export function AtlasPage() {
           ))}
         </div>
       </aside>
-      <div className="flex min-w-0 flex-1 flex-col">{mapId ? <MapView key={mapId} mapId={mapId} /> : <EmptyState title="Select or create a world map" />}</div>
+      <div className="relative flex min-w-0 flex-1 flex-col">
+        {openIds.map((id) => (
+          <div key={id} className={cn("min-h-0 flex-1 flex-col", id === mapId ? "flex" : "hidden")}>
+            <MapView mapId={id} active={id === mapId} onDeleted={() => setOpenIds((ids) => ids.filter((x) => x !== id))} />
+          </div>
+        ))}
+        {!mapId && <EmptyState title="Select or create a world map" />}
+      </div>
       <CreateMapDialog open={creating} onOpenChange={setCreating} campaignId={campaignId} onCreated={(id) => navigate(`/atlas/${id}`)} />
     </div>
   );
@@ -126,7 +145,7 @@ function CreateMapDialog({ open, onOpenChange, campaignId, onCreated }: { open: 
 
 type PickMode = null | "link" | "annotation";
 
-function MapView({ mapId }: { mapId: string }) {
+function MapView({ mapId, active, onDeleted }: { mapId: string; active: boolean; onDeleted: () => void }) {
   const repos = useRepos();
   const qc = useQueryClient();
   const navigate = useNavigate();
@@ -150,30 +169,63 @@ function MapView({ mapId }: { mapId: string }) {
   const [editingAnnotation, setEditingAnnotation] = useState<MapAnnotation | null>(null);
   const [deleting, setDeleting] = useState(false);
   const loadedAssetRef = useRef<string | null>(null);
+  const pendingMapTextRef = useRef<string | null>(null);
   const pickDownRef = useRef<{ x: number; y: number } | null>(null);
   const pickModeRef = useRef<PickMode>(null);
   pickModeRef.current = pickMode;
+  const [frameSrc, setFrameSrc] = useState<string | null>(null);
+  const [frameEpoch, setFrameEpoch] = useState(0);
 
   const invalidateMap = () => qc.invalidateQueries({ queryKey: qk.worldMap(mapId) });
 
-  // Boot: wait until the generator has produced its initial map, then load the saved .map if any.
+  useEffect(() => {
+    if (!map.data) return;
+    let cancelled = false;
+    (async () => {
+      if (map.data!.map_asset) {
+        setStatus("loading");
+        setStatusText("Restoring saved world…");
+        const cached = recalledMapText(map.data!.map_asset);
+        const text = cached ?? (await platform.readTextAsset(map.data!.map_asset));
+        if (cancelled) return;
+        rememberMapText(map.data!.map_asset, text);
+        pendingMapTextRef.current = text;
+        setFrameSrc(fmgSrc({ mapId, saved: true }));
+      } else {
+        pendingMapTextRef.current = null;
+        setStatus("loading");
+        setStatusText("Generating world from seed…");
+        setFrameSrc(fmgSrc({ seed: map.data!.seed }));
+      }
+    })().catch((error) => {
+      if (!cancelled) {
+        setStatus("error");
+        setStatusText(errorMessage(error));
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+    // map_asset is omitted: auto-cache writes it after first generate and must not remount the iframe.
+  }, [map.data?.id, map.data?.seed, mapId, frameEpoch]);
+
+  // Boot: with a saved .map, ?maplink= stops Azgaar generating a throwaway world; we upload the file ourselves.
   useEffect(() => {
     const frame = frameRef.current;
-    if (!frame || !map.data) return;
+    if (!frame || !frameSrc || !map.data) return;
     let cancelled = false;
     setStatus("loading");
-    waitForMap(frame)
+    waitForServices(frame)
       .then(async (w) => {
         if (cancelled) return;
-        if (map.data!.map_asset && loadedAssetRef.current !== map.data!.map_asset) {
+        const savedText = pendingMapTextRef.current;
+        if (savedText) {
+          suppressFollowupMapLink(w);
           setStatusText("Loading saved map…");
-          const text = await platform.readTextAsset(map.data!.map_asset);
-          await loadMapData(w, text);
+          await loadMapData(w, savedText);
           loadedAssetRef.current = map.data!.map_asset;
-          // uploadMap is asynchronous beyond its promise; give the generator a moment to redraw.
-          await new Promise((r) => setTimeout(r, 1500));
-          await waitForMap(frame);
         }
+        await waitForMap(frame);
         if (cancelled) return;
         dismissUpdateDialog(w);
         installExternalLinkHook(w, (url) => {
@@ -192,7 +244,20 @@ function MapView({ mapId }: { mapId: string }) {
           patch.width = size.width;
           patch.height = size.height;
         }
+        if (!map.data!.map_asset) {
+          setStatusText("Caching world for next time…");
+          const text = await exportMapData(w);
+          if (cancelled) return;
+          const asset = await platform.writeTextAsset("maps", "map", text);
+          rememberMapText(asset.rel_path, text);
+          if (campaignId) await repos.assets.register({ campaign_id: campaignId, rel_path: asset.rel_path, kind: "map", file_name: asset.file_name, size: asset.size }).catch(() => undefined);
+          patch.map_asset = asset.rel_path;
+          patch.map_created = Date.now();
+          loadedAssetRef.current = asset.rel_path;
+          setDirty(false);
+        }
         if (Object.keys(patch).length) await repos.worldMaps.update(mapId, patch).then(invalidateMap);
+        if (!cancelled) setStatusText("");
       })
       .catch((error) => {
         if (cancelled) return;
@@ -203,7 +268,12 @@ function MapView({ mapId }: { mapId: string }) {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [map.data?.id, map.data?.map_asset]);
+  }, [frameSrc, frameEpoch]);
+
+  useEffect(() => {
+    if (!active || !win) return;
+    win.dispatchEvent(new Event("resize"));
+  }, [active, win]);
 
   // Track regenerations inside the generator.
   useEffect(() => {
@@ -234,9 +304,9 @@ function MapView({ mapId }: { mapId: string }) {
 
   // /atlas/:mapId?entity=ID zooms to a linked feature. ?link=ID starts pick mode for that location.
   useEffect(() => {
+    if (!active || status !== "ready" || !win) return;
     const entityId = params.get("entity");
     const linkId = params.get("link");
-    if (status !== "ready" || !win) return;
     if (linkId) {
       setPickMode("link");
       setTab("links");
@@ -250,9 +320,10 @@ function MapView({ mapId }: { mapId: string }) {
     } else toast.info("That record is not placed on this map yet. Press Link feature and click a town.");
     params.delete("entity");
     setParams(params, { replace: true });
-  }, [params, setParams, status, win, links.data]);
+  }, [active, params, setParams, status, win, links.data]);
 
   useEffect(() => {
+    if (!active) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== "Escape") return;
       if (pickMode) {
@@ -264,7 +335,7 @@ function MapView({ mapId }: { mapId: string }) {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [pickMode]);
+  }, [active, pickMode]);
 
   useEffect(() => {
     if (!activeLinkId) return;
@@ -277,6 +348,7 @@ function MapView({ mapId }: { mapId: string }) {
       if (!win) throw new Error("Map not ready");
       const text = await exportMapData(win);
       const asset = await platform.writeTextAsset("maps", "map", text, map.data?.map_asset ?? null);
+      rememberMapText(asset.rel_path, text);
       loadedAssetRef.current = asset.rel_path;
       await repos.worldMaps.update(mapId, { map_asset: asset.rel_path, seed: win.options?.map?.seed ?? map.data?.seed ?? null, fmg_version: win.VERSION ?? null, map_created: Date.now() });
       if (campaignId) await repos.assets.register({ campaign_id: campaignId, rel_path: asset.rel_path, kind: "map", file_name: asset.file_name, size: asset.size }).catch(() => undefined);
@@ -307,7 +379,7 @@ function MapView({ mapId }: { mapId: string }) {
       if (map.data?.map_asset) await platform.deleteAsset(map.data.map_asset).catch(() => undefined);
       await repos.worldMaps.delete(mapId);
     },
-    { success: "Map deleted", invalidate: [["maps"]], onSuccess: () => navigate("/atlas") },
+    { success: "Map deleted", invalidate: [["maps"]], onSuccess: () => { if (map.data?.map_asset) forgetMapText(map.data.map_asset); onDeleted(); navigate("/atlas"); } },
   );
   const addLink = useAction(
     (input: { feature: FmgFeature; entityId: string }) =>
@@ -391,12 +463,6 @@ function MapView({ mapId }: { mapId: string }) {
 
   const entityById = useMemo(() => new Map((places.data ?? []).map((e) => [e.id, e])), [places.data]);
   const activeLink = (links.data ?? []).find((l) => l.id === activeLinkId) ?? null;
-  const src = useMemo(() => {
-    if (!map.data) return null;
-    const q = new URLSearchParams();
-    if (map.data.seed && !map.data.map_asset) q.set("seed", map.data.seed);
-    return `/fmg/index.html${q.size ? `?${q}` : ""}`;
-  }, [map.data]);
 
   if (!map.data) return <div className="flex flex-1 items-center justify-center"><Spinner /></div>;
 
@@ -423,7 +489,7 @@ function MapView({ mapId }: { mapId: string }) {
           <Tooltip content="Writes the generator's current .map file into this campaign. Feature links are stored separately and do not need this button."><Button size="sm" variant="primary" onClick={() => saveMap.mutate()} disabled={status !== "ready" || saveMap.isPending}><Save size={13} /> Save to campaign</Button></Tooltip>
         </div>
         <div className="relative min-h-0 flex-1 bg-black">
-          {src && <iframe ref={frameRef} src={src} title="Fantasy Map Generator" className="h-full w-full border-0" />}
+          {frameSrc && <iframe key={frameEpoch} ref={frameRef} src={frameSrc} title="Fantasy Map Generator" className="h-full w-full border-0" />}
           {status !== "ready" && (
             <div className="pointer-events-none absolute inset-x-0 top-0 flex justify-center p-3">
               <div className={cn("flex items-center gap-2 rounded-md border border-border bg-bg-elevated/95 px-3 py-2 text-xs shadow-lg", status === "error" && "border-blood text-blood")}>
@@ -494,10 +560,10 @@ function MapView({ mapId }: { mapId: string }) {
                 <dt>Asset</dt><dd className="truncate">{map.data.map_asset ?? "—"}</dd>
               </dl>
               <p className="text-[11px] text-ink-faint">
-                <b>Save to campaign</b> writes the generator’s current world (terrain, states, towns, styles) as a <code>.map</code> file next to the database. The next time you open this atlas entry, that file is loaded instead of regenerating from the seed. Feature links and annotations live in the database and are saved as soon as you create them — they do not depend on this button. Backups and campaign exports include the file once it has been saved.
+                The atlas keeps this generator live when you switch tabs, so it will not regenerate. The first time a world is ready it is cached as a <code>.map</code> file; later visits load that file directly instead of generating a throwaway map first. <b>Save to campaign</b> writes any edits you made inside the generator. Feature links and annotations live in the database and are saved as soon as you create them.
               </p>
               <div className="flex gap-2">
-                <Button size="sm" variant="outline" onClick={() => { loadedAssetRef.current = null; frameRef.current?.contentWindow?.location.reload(); setStatus("loading"); setStatusText("Reloading…"); }}>
+                <Button size="sm" variant="outline" onClick={() => { loadedAssetRef.current = null; pendingMapTextRef.current = null; setWin(null); setStatus("loading"); setStatusText("Reloading…"); setFrameSrc(null); setFrameEpoch((n) => n + 1); }}>
                   <RefreshCw size={13} /> Reload generator
                 </Button>
                 <Button size="sm" variant="danger" onClick={() => setDeleting(true)}><Trash2 size={13} /> Delete map</Button>
