@@ -99,6 +99,8 @@ export const characterFieldsSchema = z.object({
 export type CharacterFields = z.infer<typeof characterFieldsSchema>;
 
 export const creatureFieldsSchema = z.object({
+  /** "" = custom (campaign-made); "srd-2024" etc. = bundled standard library record. */
+  source: z.string().default(""),
   size: z.string().default("Medium"),
   type: z.string().default("humanoid"),
   alignment: z.string().default("unaligned"),
@@ -150,6 +152,8 @@ export const ITEM_CATEGORIES = [
 export const ITEM_RARITIES = ["common", "uncommon", "rare", "very rare", "legendary", "artifact", "varies"] as const;
 
 export const itemFieldsSchema = z.object({
+  /** "" = custom (campaign-made); "srd-2024" etc. = bundled standard library record. */
+  source: z.string().default(""),
   category: z.enum(ITEM_CATEGORIES).default("equipment"),
   rarity: z.enum(ITEM_RARITIES).default("common"),
   weight: z.number().min(0).default(0),

@@ -37,6 +37,17 @@ export interface EntityQuery {
   status?: string;
   limit?: number;
   orderBy?: "name" | "updated_at" | "sort_order" | "created_at";
+  /**
+   * When true, campaign-independent library records (`campaign_id IS NULL`, e.g. the bundled
+   * SRD-2024 set) are returned alongside the campaign's own records. Ignored unless `campaign_id`
+   * is a concrete id.
+   */
+  include_shared?: boolean;
+  /**
+   * Filter by provenance. "standard" = bundled library records (non-empty `fields.source`);
+   * "custom" = records with no source; "all"/undefined = both.
+   */
+  source?: "standard" | "custom" | "all";
 }
 
 export interface SearchHit {
@@ -49,15 +60,20 @@ const ENTITY_COLUMNS =
   "id, campaign_id, world_id, parent_id, kind, subtype, name, summary, body_md, read_aloud_md, dm_notes_md, secret_md, tags, fields, status, sort_order, image_asset, created_at, updated_at";
 
 export class EntityRepository {
-  constructor(private readonly db: SqlDriver) {}
+  constructor(private readonly db: SqlDriver) { }
 
   /** Returns the INSERT statement for an entity so callers can include it in a batch. */
-  insertStatement(input: EntityInput, id = input.id ?? newId(), timestamp = now()): { id: string; statement: Statement } {
+  insertStatement(
+    input: EntityInput,
+    id = input.id ?? newId(),
+    timestamp = now(),
+    opts: { orReplace?: boolean } = {},
+  ): { id: string; statement: Statement } {
     const fields = normalizeFields(input.kind, input.fields ?? {});
     return {
       id,
       statement: {
-        sql: `INSERT INTO entities (${ENTITY_COLUMNS}) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        sql: `INSERT ${opts.orReplace ? "OR REPLACE " : ""}INTO entities (${ENTITY_COLUMNS}) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         params: [
           id,
           input.campaign_id ?? null,
@@ -134,10 +150,19 @@ export class EntityRepository {
     const params: (string | number | null)[] = [];
     if (query.campaign_id !== undefined) {
       if (query.campaign_id === null) where.push("campaign_id IS NULL");
-      else {
+      else if (query.include_shared) {
+        // The campaign's own records plus the shared, campaign-independent library.
+        where.push("(campaign_id = ? OR campaign_id IS NULL)");
+        params.push(query.campaign_id);
+      } else {
         where.push("campaign_id = ?");
         params.push(query.campaign_id);
       }
+    }
+    if (query.source === "standard") {
+      where.push("COALESCE(json_extract(fields, '$.source'), '') != ''");
+    } else if (query.source === "custom") {
+      where.push("COALESCE(json_extract(fields, '$.source'), '') = ''");
     }
     if (query.kinds && query.kinds.length > 0) {
       where.push(`kind IN (${query.kinds.map(() => "?").join(",")})`);
@@ -175,9 +200,8 @@ export class EntityRepository {
           : query.orderBy === "sort_order"
             ? "sort_order ASC, name COLLATE NOCASE ASC"
             : "name COLLATE NOCASE ASC";
-    const sql = `SELECT ${ENTITY_COLUMNS} FROM entities ${where.length ? `WHERE ${where.join(" AND ")}` : ""} ORDER BY ${order} ${
-      query.limit ? `LIMIT ${Math.max(1, Math.floor(query.limit))}` : ""
-    }`;
+    const sql = `SELECT ${ENTITY_COLUMNS} FROM entities ${where.length ? `WHERE ${where.join(" AND ")}` : ""} ORDER BY ${order} ${query.limit ? `LIMIT ${Math.max(1, Math.floor(query.limit))}` : ""
+      }`;
     const rows = await this.db.select(sql, params);
     return rows.map(mapEntity);
   }
@@ -242,9 +266,8 @@ export class EntityRepository {
         const index = value.toLowerCase().indexOf(lower);
         if (index >= 0) {
           const start = Math.max(0, index - 50);
-          const snippet = `${start > 0 ? "…" : ""}${value.slice(start, index + trimmed.length + 70)}${
-            index + trimmed.length + 70 < value.length ? "…" : ""
-          }`;
+          const snippet = `${start > 0 ? "…" : ""}${value.slice(start, index + trimmed.length + 70)}${index + trimmed.length + 70 < value.length ? "…" : ""
+            }`;
           return { entity, field, snippet: snippet.replace(/\s+/g, " ") };
         }
       }

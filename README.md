@@ -119,6 +119,12 @@ To install, run the generated `-setup.exe`. The app appears in the Start menu as
   combat tracker with initiative, HP, conditions and outcome commit.
 - **Characters & NPCs, Creatures, Items & Equipment, Lore & Documents, Quests & Events, Timeline** –
   interconnected records with `[[wiki links]]`, relations, inventories and objectives.
+- **Standard rules library (SRD 2024)** – the full SRD-2024 bestiary and item/magic-item lists are
+  bundled and available in *every* campaign. On the Creatures and Items & Equipment pages the source
+  filter switches between **All**, **Custom** (your own records) and **Standard (SRD)**. Standard
+  records are shared across campaigns (not copied into each one); duplicate one to make an editable,
+  campaign-owned copy. The data comes from
+  [open5e](https://github.com/open5e/open5e-api); regenerate the bundle with `npm run srd:build`.
 - **Session Manager** – plan, run and recap sessions; quick notes are promoted into permanent records.
 - **Global Search** (Ctrl+Shift+F) and the **command palette** (Ctrl+K) reach any record.
 - **Settings & Data** – defaults, backups, campaign export/import, storage locations.

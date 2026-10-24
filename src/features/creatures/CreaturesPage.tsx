@@ -11,7 +11,8 @@ export function CreaturesPage() {
       title="Creatures"
       kinds={["creature"]}
       basePath="/creatures"
-      description="Monster and NPC stat block templates. Encounters reference these; combat changes only the instance, never the template."
+      library
+      description="Monster and NPC stat block templates. The standard SRD 2024 bestiary is available in every campaign; your own creatures are 'Custom'. Encounters reference these; combat changes only the instance, never the template."
       rowMeta={(e) => `CR ${e.fields.cr ?? "?"} · ${e.fields.size ?? ""} ${e.fields.type ?? ""}`}
       extras={{ banner: (e) => <CreatureBanner entity={e} /> }}
     />

@@ -3,6 +3,7 @@ import { migrate } from "@/persistence/migrations";
 import { createRepositories, type Repositories } from "@/persistence/repositories";
 import { TauriSqlDriver } from "@/persistence/tauriDriver";
 import { findDemoCampaign, seedDemoCampaign } from "@/seed/demoCampaign";
+import { seedSrdLibrary } from "@/seed/srdLibrary";
 import { errorMessage } from "@/lib/utils";
 import { useAppStore } from "./appStore";
 import { isTauri, platform, type AppPaths } from "./platform";
@@ -50,6 +51,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
         const repos = createRepositories(driver);
         const paths = await platform.paths();
         const appVersion = await platform.appVersion();
+
+        // Install / refresh the bundled SRD-2024 standard library (campaign-independent records
+        // shared by every campaign). Idempotent and versioned, so this is a no-op after the first run.
+        setBoot({ status: "loading", step: "Loading standard rules library" });
+        await seedSrdLibrary(repos).catch((error) => console.warn("SRD library seeding failed", error));
 
         setBoot({ status: "loading", step: "Checking campaigns" });
         const campaigns = await repos.entities.list({ kinds: ["campaign"] });
