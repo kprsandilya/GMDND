@@ -163,7 +163,15 @@ pub fn execute(conn: &Connection, sql: &str, params: &[Value]) -> AppResult<Exec
     Ok(ExecResult { changes, last_insert_rowid: conn.last_insert_rowid() })
 }
 
+/// Clears a leftover BEGIN (failed migration / script) so `transaction()` can start cleanly.
+fn abandon_open_transaction(conn: &Connection) {
+    if !conn.is_autocommit() {
+        let _ = conn.execute_batch("ROLLBACK");
+    }
+}
+
 pub fn batch(conn: &mut Connection, statements: &[Statement]) -> AppResult<Vec<ExecResult>> {
+    abandon_open_transaction(conn);
     let tx = conn.transaction()?;
     let mut results = Vec::with_capacity(statements.len());
     for (index, statement) in statements.iter().enumerate() {
@@ -200,7 +208,10 @@ pub fn db_batch(db: tauri::State<'_, Db>, statements: Vec<Statement>) -> AppResu
 #[tauri::command]
 pub fn db_execute_script(db: tauri::State<'_, Db>, sql: String) -> AppResult<()> {
     db.with_conn(|conn| {
-        conn.execute_batch(&sql)?;
+        if let Err(error) = conn.execute_batch(&sql) {
+            abandon_open_transaction(conn);
+            return Err(error.into());
+        }
         Ok(())
     })
 }
