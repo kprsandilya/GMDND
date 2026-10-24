@@ -1,8 +1,9 @@
 import { useQuery } from "@tanstack/react-query";
 import { Globe2, MapPin } from "lucide-react";
 import { Link, useNavigate } from "react-router";
+import { toast } from "sonner";
 import { useRepos } from "@/app/appContext";
-import { useAction, useCampaignId, useEntities } from "@/app/queries";
+import { qk, useAction, useCampaignId, useEntities } from "@/app/queries";
 import { routeForEntity } from "@/app/routes";
 import { EntityWorkspace } from "@/components/EntityWorkspace";
 import { Badge, Button } from "@/components/ui";
@@ -44,13 +45,30 @@ export function LocationsPage() {
 
 function MapRefs({ entity, onOpen }: { entity: Entity; onOpen: (mapId: string) => void }) {
   const repos = useRepos();
+  const campaignId = useCampaignId();
+  const navigate = useNavigate();
   const links = useQuery({ queryKey: ["maps", "featureLinksForEntity", entity.id], queryFn: () => repos.worldMaps.featureLinksForEntity(entity.id) });
+  const maps = useQuery({ queryKey: qk.worldMaps(campaignId), queryFn: () => repos.worldMaps.list(campaignId!), enabled: !!campaignId });
   const dungeons = useEntities({ kinds: ["dungeon"], parent_id: entity.id });
+  const placeOnMap = () => {
+    const first = maps.data?.[0];
+    if (!first) {
+      toast.error("Create a world map in the Atlas first.");
+      navigate("/atlas");
+      return;
+    }
+    navigate(`/atlas/${first.id}?link=${entity.id}`);
+  };
   return (
     <div className="space-y-3">
       <div>
-        <div className="label">World map features</div>
-        {(links.data ?? []).length === 0 && <div className="text-[12px] text-ink-faint">Not linked to any atlas feature. Open the World Atlas, select a feature and choose “Link to entity”.</div>}
+        <div className="mb-1 flex items-center justify-between">
+          <div className="label">World map features</div>
+          <Button size="sm" variant="outline" onClick={placeOnMap}>
+            <Globe2 size={12} /> Place on world map
+          </Button>
+        </div>
+        {(links.data ?? []).length === 0 && <div className="text-[12px] text-ink-faint">Not on the atlas yet. Use Place on world map, then click a town or state.</div>}
         <ul className="space-y-1">
           {(links.data ?? []).map((l) => (
             <li key={l.id} className="flex items-center gap-2 text-[12.5px]">

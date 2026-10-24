@@ -14,7 +14,7 @@ import { Badge, Button, Checkbox, ConfirmDialog, Dialog, EmptyState, Field, Inpu
 import { GEOGRAPHIC_KINDS, type Entity, type EntityKind, type MapAnnotation, type MapFeatureLink, type WorldMap } from "@/domain/types";
 import { cn, errorMessage } from "@/lib/utils";
 import { DEMO_MAP_SEED } from "@/seed/demoCampaign";
-import { clientToMap, dismissUpdateDialog, exportMapData, featureAt, listFeatures, loadMapData, renderOverlay, waitForMap, zoomTo, type FmgFeature, type FmgWindow } from "./fmgBridge";
+import { dismissUpdateDialog, exportMapData, featureAt, iframeClientToMap, installExternalLinkHook, listFeatures, loadMapData, renderOverlay, waitForMap, zoomScaleFor, zoomTo, type FmgFeature, type FmgWindow } from "./fmgBridge";
 
 const ANNOTATION_COLORS: Record<MapAnnotation["kind"], string> = { poi: "#d9a441", note: "#8fb3c9", secret: "#b58cf0", quest: "#e0893f", encounter: "#c4524a", danger: "#ff5a5a" };
 const LINK_COLOR = "#f0c674";
@@ -131,6 +131,7 @@ function MapView({ mapId }: { mapId: string }) {
   const qc = useQueryClient();
   const navigate = useNavigate();
   const [params, setParams] = useSearchParams();
+  const campaignId = useCampaignId();
   const panelWidth = useAppStore((s) => s.settings.rightPanelWidth);
   const map = useQuery({ queryKey: qk.worldMap(mapId), queryFn: () => repos.worldMaps.get(mapId) });
   const links = useQuery({ queryKey: [...qk.worldMap(mapId), "links"], queryFn: () => repos.worldMaps.featureLinks(mapId) });
@@ -149,6 +150,9 @@ function MapView({ mapId }: { mapId: string }) {
   const [editingAnnotation, setEditingAnnotation] = useState<MapAnnotation | null>(null);
   const [deleting, setDeleting] = useState(false);
   const loadedAssetRef = useRef<string | null>(null);
+  const pickDownRef = useRef<{ x: number; y: number } | null>(null);
+  const pickModeRef = useRef<PickMode>(null);
+  pickModeRef.current = pickMode;
 
   const invalidateMap = () => qc.invalidateQueries({ queryKey: qk.worldMap(mapId) });
 
@@ -172,6 +176,9 @@ function MapView({ mapId }: { mapId: string }) {
         }
         if (cancelled) return;
         dismissUpdateDialog(w);
+        installExternalLinkHook(w, (url) => {
+          void platform.openExternal(url).catch((error) => toast.error(errorMessage(error)));
+        });
         setWin(w);
         setFeatures(listFeatures(w));
         setStatus("ready");
@@ -213,63 +220,57 @@ function MapView({ mapId }: { mapId: string }) {
   useEffect(() => {
     if (!win || status !== "ready") return;
     const points = [
-      ...(links.data ?? []).filter((l) => l.x !== null && l.y !== null).map((l) => ({ id: l.id, x: l.x!, y: l.y!, label: l.feature_name ?? "", color: LINK_COLOR })),
-      ...(annotations.data ?? []).map((a) => ({ id: a.id, x: a.x, y: a.y, label: a.title, color: a.color ?? ANNOTATION_COLORS[a.kind] })),
+      ...(links.data ?? []).filter((l) => l.x !== null && l.y !== null).map((l) => {
+        const name = places.data?.find((e) => e.id === l.entity_id)?.name;
+        return { id: l.id, x: l.x!, y: l.y!, label: name ? `${name} · ${l.feature_name ?? l.feature_type}` : (l.feature_name ?? ""), color: LINK_COLOR };
+      }),
+      ...(annotations.data ?? []).filter((a) => !a.hidden).map((a) => ({ id: a.id, x: a.x, y: a.y, label: a.title, color: a.color ?? ANNOTATION_COLORS[a.kind] })),
+      ...(picked ? [{ id: "picked", x: picked.x, y: picked.y, label: picked.name, color: "#ff7a2f" }] : []),
     ];
     renderOverlay(win, points, activeLinkId);
     const id = setInterval(() => renderOverlay(win, points, activeLinkId), 4000); // survives generator redraws
     return () => clearInterval(id);
-  }, [win, status, links.data, annotations.data, activeLinkId]);
+  }, [win, status, links.data, annotations.data, activeLinkId, picked, places.data]);
 
-  // Deep link: /atlas/:mapId?entity=ID ? zoom to the first linked feature.
+  // /atlas/:mapId?entity=ID zooms to a linked feature. ?link=ID starts pick mode for that location.
   useEffect(() => {
     const entityId = params.get("entity");
-    if (!entityId || status !== "ready" || !win || !links.data) return;
+    const linkId = params.get("link");
+    if (status !== "ready" || !win) return;
+    if (linkId) {
+      setPickMode("link");
+      setTab("links");
+      return;
+    }
+    if (!entityId || !links.data) return;
     const link = links.data.find((l) => l.entity_id === entityId);
     if (link && link.x !== null && link.y !== null) {
-      zoomTo(win, link.x, link.y, 6);
+      zoomTo(win, link.x, link.y, zoomScaleFor(link.feature_type));
       setActiveLinkId(link.id);
-    } else toast.info("That record is not placed on this map yet.");
+    } else toast.info("That record is not placed on this map yet. Press Link feature and click a town.");
     params.delete("entity");
     setParams(params, { replace: true });
   }, [params, setParams, status, win, links.data]);
 
-  // Pick mode: capture clicks inside the generator's document.
   useEffect(() => {
-    if (!win || !pickMode) return;
-    const doc = win.document;
-    let downAt: { x: number; y: number } | null = null;
-    const onDown = (e: MouseEvent) => { downAt = { x: e.clientX, y: e.clientY }; };
-    const onUp = (e: MouseEvent) => {
-      if (!downAt || Math.hypot(e.clientX - downAt.x, e.clientY - downAt.y) > 4) return; // it was a drag
-      const pt = clientToMap(win, e.clientX, e.clientY);
-      if (!pt) return;
-      e.preventDefault();
-      e.stopPropagation();
-      const feature = pickMode === "link" ? featureAt(win, pt.x, pt.y) : { type: "point" as const, id: 0, name: "Annotation", x: pt.x, y: pt.y };
-      if (feature) setPicked(feature);
-    };
-    // Swallow the generator's own click handlers (burg/state editors) while picking; panning via drag still works.
-    const onClick = (e: MouseEvent) => {
-      if ((e.target as Element | null)?.closest?.("#map")) {
-        e.preventDefault();
-        e.stopPropagation();
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      if (pickMode) {
+        setPickMode(null);
+        setPicked(null);
+      } else {
+        setActiveLinkId(null);
       }
     };
-    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setPickMode(null); };
-    doc.addEventListener("mousedown", onDown, true);
-    doc.addEventListener("mouseup", onUp, true);
-    doc.addEventListener("click", onClick, true);
-    doc.addEventListener("keydown", onKey, true);
-    doc.body.style.cursor = "crosshair";
-    return () => {
-      doc.removeEventListener("mousedown", onDown, true);
-      doc.removeEventListener("mouseup", onUp, true);
-      doc.removeEventListener("click", onClick, true);
-      doc.removeEventListener("keydown", onKey, true);
-      doc.body.style.cursor = "";
-    };
-  }, [win, pickMode]);
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [pickMode]);
+
+  useEffect(() => {
+    if (!activeLinkId) return;
+    const id = window.setTimeout(() => setActiveLinkId(null), 4000);
+    return () => window.clearTimeout(id);
+  }, [activeLinkId]);
 
   const saveMap = useAction(
     async () => {
@@ -278,6 +279,7 @@ function MapView({ mapId }: { mapId: string }) {
       const asset = await platform.writeTextAsset("maps", "map", text, map.data?.map_asset ?? null);
       loadedAssetRef.current = asset.rel_path;
       await repos.worldMaps.update(mapId, { map_asset: asset.rel_path, seed: win.options?.map?.seed ?? map.data?.seed ?? null, fmg_version: win.VERSION ?? null, map_created: Date.now() });
+      if (campaignId) await repos.assets.register({ campaign_id: campaignId, rel_path: asset.rel_path, kind: "map", file_name: asset.file_name, size: asset.size }).catch(() => undefined);
       setDirty(false);
       return asset;
     },
@@ -310,7 +312,17 @@ function MapView({ mapId }: { mapId: string }) {
   const addLink = useAction(
     (input: { feature: FmgFeature; entityId: string }) =>
       repos.worldMaps.linkFeature({ map_id: mapId, feature_type: input.feature.type, feature_id: input.feature.id, feature_name: input.feature.name, x: input.feature.x, y: input.feature.y, entity_id: input.entityId }),
-    { success: "Feature linked", invalidate: [qk.worldMap(mapId), ["entities"]], onSuccess: () => { setPicked(null); setPickMode(null); } },
+    { success: (link) => `Linked to ${link.feature_name ?? "feature"}`, invalidate: [qk.worldMap(mapId), ["entities"], ["maps"]], onSuccess: (link) => {
+      setPicked(null);
+      setPickMode(null);
+      setTab("links");
+      setActiveLinkId(link.id);
+      if (link.x !== null && link.y !== null && win) zoomTo(win, link.x, link.y, zoomScaleFor(link.feature_type));
+      if (params.get("link")) {
+        params.delete("link");
+        setParams(params, { replace: true });
+      }
+    } },
   );
   const removeLink = useAction((id: string) => repos.worldMaps.unlinkFeature(id), { invalidate: [qk.worldMap(mapId)] });
   const saveAnnotation = useAction(
@@ -319,13 +331,66 @@ function MapView({ mapId }: { mapId: string }) {
   );
   const removeAnnotation = useAction((id: string) => repos.worldMaps.deleteAnnotation(id), { invalidate: [qk.worldMap(mapId)] });
 
-  const focus = useCallback((x: number | null, y: number | null, id: string | null, z = 6) => {
+  const clearSelection = useCallback(() => setActiveLinkId(null), []);
+
+  const focus = useCallback((x: number | null, y: number | null, id: string | null, z = 8, label?: string) => {
+    if (id && id === activeLinkId) {
+      setActiveLinkId(null);
+      return;
+    }
     if (!win || x === null || y === null) return;
     zoomTo(win, x, y, z);
     setActiveLinkId(id);
+    if (label) toast.message(label);
+  }, [win, activeLinkId]);
+
+  const applyPick = useCallback((pt: { x: number; y: number }) => {
+    const mode = pickModeRef.current;
+    if (!win || !mode) return;
+    const feature = mode === "link" ? featureAt(win, pt.x, pt.y) ?? { type: "point" as const, id: 0, name: "Point on map", x: pt.x, y: pt.y } : { type: "point" as const, id: 0, name: "Annotation", x: pt.x, y: pt.y };
+    setTab(mode === "link" ? "links" : "annotations");
+    setPicked(feature);
+    zoomTo(win, feature.x, feature.y, zoomScaleFor(feature.type), 700);
+    toast.success(mode === "link" ? `Selected ${feature.type}: ${feature.name}` : "Annotation placed — fill it in on the right");
   }, [win]);
 
+  // Pick inside the iframe so clientX/Y match Azgaar's getScreenCTM (host overlay coords miss).
+  useEffect(() => {
+    if (!win || !pickMode || status !== "ready") return;
+    const mapEl = win.document.getElementById("map");
+    const viewbox = win.document.getElementById("viewbox") as SVGGElement | null;
+    if (!mapEl) return;
+    viewbox?.style.setProperty("cursor", "crosshair");
+    const onDown = (e: Event) => {
+      const ev = e as MouseEvent;
+      pickDownRef.current = { x: ev.clientX, y: ev.clientY };
+    };
+    const onClick = (e: Event) => {
+      const ev = e as MouseEvent;
+      const start = pickDownRef.current;
+      pickDownRef.current = null;
+      if (start && Math.hypot(ev.clientX - start.x, ev.clientY - start.y) > 6) return;
+      ev.preventDefault();
+      ev.stopPropagation();
+      ev.stopImmediatePropagation();
+      const pt = iframeClientToMap(win, ev.clientX, ev.clientY);
+      if (!pt) {
+        toast.error("Could not read that map position. Try again after the generator finishes zooming.");
+        return;
+      }
+      applyPick(pt);
+    };
+    mapEl.addEventListener("mousedown", onDown, true);
+    mapEl.addEventListener("click", onClick, true);
+    return () => {
+      viewbox?.style.removeProperty("cursor");
+      mapEl.removeEventListener("mousedown", onDown, true);
+      mapEl.removeEventListener("click", onClick, true);
+    };
+  }, [win, pickMode, status, applyPick]);
+
   const entityById = useMemo(() => new Map((places.data ?? []).map((e) => [e.id, e])), [places.data]);
+  const activeLink = (links.data ?? []).find((l) => l.id === activeLinkId) ?? null;
   const src = useMemo(() => {
     if (!map.data) return null;
     const q = new URLSearchParams();
@@ -355,7 +420,7 @@ function MapView({ mapId }: { mapId: string }) {
           </Tooltip>
           <Tooltip content="Load a .map file from disk into the generator"><Button size="sm" variant="outline" onClick={() => loadFile.mutate()} disabled={status !== "ready"}><FolderOpen size={13} /> Load</Button></Tooltip>
           <Tooltip content="Export the current map as a .map file"><Button size="sm" variant="outline" onClick={() => exportFile.mutate()} disabled={status !== "ready"}><Download size={13} /> Export</Button></Tooltip>
-          <Tooltip content="Store the current map with this campaign (included in backups and exports)"><Button size="sm" variant="primary" onClick={() => saveMap.mutate()} disabled={status !== "ready" || saveMap.isPending}><Save size={13} /> Save to campaign</Button></Tooltip>
+          <Tooltip content="Writes the generator's current .map file into this campaign. Feature links are stored separately and do not need this button."><Button size="sm" variant="primary" onClick={() => saveMap.mutate()} disabled={status !== "ready" || saveMap.isPending}><Save size={13} /> Save to campaign</Button></Tooltip>
         </div>
         <div className="relative min-h-0 flex-1 bg-black">
           {src && <iframe ref={frameRef} src={src} title="Fantasy Map Generator" className="h-full w-full border-0" />}
@@ -366,9 +431,24 @@ function MapView({ mapId }: { mapId: string }) {
               </div>
             </div>
           )}
+          {activeLink && !pickMode && (
+            <div className="absolute inset-x-0 top-0 z-10 flex justify-center p-3">
+              <div className="flex max-w-lg items-start gap-3 rounded-md border-2 border-gold bg-bg-elevated/95 px-4 py-2 shadow-lg">
+                <div className="min-w-0 text-left">
+                  <div className="text-[11px] uppercase tracking-wide text-gold">Selected on map</div>
+                  <div className="font-display text-lg text-ink">{entityById.get(activeLink.entity_id)?.name ?? "Unknown location"}</div>
+                  <div className="text-xs text-ink-muted">{activeLink.feature_type} · {activeLink.feature_name}</div>
+                  <div className="mt-1 text-[11px] text-ink-faint">Esc, ✕, or click the same link again to deselect</div>
+                </div>
+                <button type="button" className="shrink-0 text-ink-muted hover:text-ink" title="Deselect (Esc)" onClick={clearSelection}>
+                  <X size={16} />
+                </button>
+              </div>
+            </div>
+          )}
           {pickMode && (
-            <div className="pointer-events-none absolute inset-x-0 bottom-0 flex justify-center p-3">
-              <div className="rounded-md border border-ember bg-bg-elevated/95 px-3 py-1.5 text-xs">{pickMode === "link" ? "Click a town, state, province or marker to link it. Esc to cancel." : "Click anywhere on the map to place an annotation. Esc to cancel."}</div>
+            <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 flex justify-center p-3">
+              <div className="rounded-md border border-ember bg-bg-elevated/95 px-3 py-1.5 text-xs">{pickMode === "link" ? "Click a town, state, province or marker. The form opens on the right. Esc to cancel." : "Click anywhere on the map to place an annotation. Esc to cancel."}</div>
             </div>
           )}
         </div>
@@ -382,7 +462,7 @@ function MapView({ mapId }: { mapId: string }) {
           ))}
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto p-3">
-          {picked && pickMode === "link" && <LinkForm feature={picked} places={places.data ?? []} onCancel={() => setPicked(null)} onSubmit={(entityId) => addLink.mutate({ feature: picked, entityId })} pending={addLink.isPending} />}
+          {picked && pickMode === "link" && <LinkForm feature={picked} places={places.data ?? []} presetId={params.get("link")} onCancel={() => setPicked(null)} onSubmit={(entityId) => addLink.mutate({ feature: picked, entityId })} pending={addLink.isPending} />}
           {picked && pickMode === "annotation" && !editingAnnotation && (
             <AnnotationForm
               initial={{ id: "", map_id: mapId, x: picked.x, y: picked.y, kind: "poi", title: "", body_md: "", entity_id: null, color: null, hidden: false, created_at: "", updated_at: "" }}
@@ -393,12 +473,12 @@ function MapView({ mapId }: { mapId: string }) {
           )}
           {editingAnnotation && <AnnotationForm initial={editingAnnotation} onCancel={() => setEditingAnnotation(null)} onSubmit={(a) => saveAnnotation.mutate(a)} pending={saveAnnotation.isPending} />}
           {tab === "links" && !picked && !editingAnnotation && (
-            <LinksList links={links.data ?? []} entityById={entityById} activeId={activeLinkId} onFocus={(l) => focus(l.x, l.y, l.id)} onOpen={(e) => navigate(routeForEntity(e))} onRemove={(id) => removeLink.mutate(id)} />
+            <LinksList links={links.data ?? []} entityById={entityById} activeId={activeLinkId} onFocus={(l) => focus(l.x, l.y, l.id, zoomScaleFor(l.feature_type), entityById.get(l.entity_id)?.name ?? l.feature_name ?? "Location")} onOpen={(e) => navigate(routeForEntity(e))} onRemove={(id) => removeLink.mutate(id)} onClear={clearSelection} />
           )}
           {tab === "annotations" && !picked && !editingAnnotation && (
             <AnnotationsList annotations={annotations.data ?? []} activeId={activeLinkId} onFocus={(a) => focus(a.x, a.y, a.id, 8)} onEdit={setEditingAnnotation} onToggleHidden={(a) => saveAnnotation.mutate({ ...a, hidden: !a.hidden })} onRemove={(id) => removeAnnotation.mutate(id)} />
           )}
-          {tab === "features" && !picked && <FeaturesList features={features} links={links.data ?? []} onFocus={(f) => focus(f.x, f.y, null, f.type === "state" ? 3 : 7)} onLink={(f) => { setPickMode("link"); setPicked(f); }} />}
+          {tab === "features" && !picked && <FeaturesList features={features} links={links.data ?? []} onFocus={(f) => focus(f.x, f.y, null, zoomScaleFor(f.type))} onLink={(f) => { setPickMode("link"); setPicked(f); setTab("links"); }} />}
           {tab === "map" && !picked && (
             <div className="grid gap-3 text-sm">
               <Field label="World record">
@@ -414,7 +494,7 @@ function MapView({ mapId }: { mapId: string }) {
                 <dt>Asset</dt><dd className="truncate">{map.data.map_asset ?? "—"}</dd>
               </dl>
               <p className="text-[11px] text-ink-faint">
-                The generator runs in an embedded frame. Use its own menus to edit terrain, states, burgs and styles; then press <b>Save map to campaign</b> so the result is stored with this campaign and included in backups and exports.
+                <b>Save to campaign</b> writes the generator’s current world (terrain, states, towns, styles) as a <code>.map</code> file next to the database. The next time you open this atlas entry, that file is loaded instead of regenerating from the seed. Feature links and annotations live in the database and are saved as soon as you create them — they do not depend on this button. Backups and campaign exports include the file once it has been saved.
               </p>
               <div className="flex gap-2">
                 <Button size="sm" variant="outline" onClick={() => { loadedAssetRef.current = null; frameRef.current?.contentWindow?.location.reload(); setStatus("loading"); setStatusText("Reloading…"); }}>
@@ -431,8 +511,8 @@ function MapView({ mapId }: { mapId: string }) {
   );
 }
 
-function LinkForm({ feature, places, onCancel, onSubmit, pending }: { feature: FmgFeature; places: Entity[]; onCancel: () => void; onSubmit: (entityId: string) => void; pending: boolean }) {
-  const [entityId, setEntityId] = useState<string | null>(null);
+function LinkForm({ feature, places, presetId, onCancel, onSubmit, pending }: { feature: FmgFeature; places: Entity[]; presetId?: string | null; onCancel: () => void; onSubmit: (entityId: string) => void; pending: boolean }) {
+  const [entityId, setEntityId] = useState<string | null>(presetId ?? null);
   const [createNew, setCreateNew] = useState(false);
   const repos = useRepos();
   const campaignId = useCampaignId();
@@ -445,7 +525,10 @@ function LinkForm({ feature, places, onCancel, onSubmit, pending }: { feature: F
     { success: "Record created", onSuccess: (id) => onSubmit(id) },
   );
   const suggestion = places.find((p) => p.name.toLowerCase() === feature.name.toLowerCase());
-  useEffect(() => { if (suggestion) setEntityId(suggestion.id); }, [suggestion]);
+  useEffect(() => {
+    if (presetId) setEntityId(presetId);
+    else if (suggestion) setEntityId(suggestion.id);
+  }, [presetId, suggestion]);
   return (
     <div className="panel mb-3 grid gap-2">
       <div className="panel-title">Link feature</div>
@@ -474,26 +557,41 @@ function LinkForm({ feature, places, onCancel, onSubmit, pending }: { feature: F
   );
 }
 
-function LinksList({ links, entityById, activeId, onFocus, onOpen, onRemove }: { links: MapFeatureLink[]; entityById: Map<string, Entity>; activeId: string | null; onFocus: (l: MapFeatureLink) => void; onOpen: (e: Entity) => void; onRemove: (id: string) => void }) {
+function LinksList({ links, entityById, activeId, onFocus, onOpen, onRemove, onClear }: { links: MapFeatureLink[]; entityById: Map<string, Entity>; activeId: string | null; onFocus: (l: MapFeatureLink) => void; onOpen: (e: Entity) => void; onRemove: (id: string) => void; onClear: () => void }) {
   if (!links.length) return <EmptyState title="No linked features" body="Use “Link feature”, then click a town or state on the map to connect it to a location record." />;
   return (
-    <ul className="grid gap-1">
-      {links.map((l) => {
-        const entity = entityById.get(l.entity_id);
-        return (
-          <li key={l.id} className={cn("row-hover flex items-center gap-2 rounded px-2 py-1.5", activeId === l.id && "row-active")}>
-            <button className="min-w-0 flex-1 text-left" onClick={() => onFocus(l)}>
-              <div className="truncate text-sm">{entity?.name ?? <span className="text-ink-faint">(missing record)</span>}</div>
-              <div className="truncate text-[11px] text-ink-faint">{l.feature_type} · {l.feature_name}</div>
-            </button>
-            {entity && (
-              <Tooltip content="Open record"><Button size="icon" variant="ghost" onClick={() => onOpen(entity)}><ExternalLink size={13} /></Button></Tooltip>
-            )}
-            <Tooltip content="Unlink"><Button size="icon" variant="ghost" onClick={() => onRemove(l.id)}><Link2Off size={13} /></Button></Tooltip>
-          </li>
-        );
-      })}
-    </ul>
+    <div className="grid gap-2">
+      {activeId && (
+        <div className="flex items-center justify-between text-[11px] text-ink-faint">
+          <span>Click the selected row again to deselect</span>
+          <Button size="sm" variant="ghost" onClick={onClear}>Deselect</Button>
+        </div>
+      )}
+      <ul className="grid gap-1">
+        {links.map((l) => {
+          const entity = entityById.get(l.entity_id);
+          return (
+            <li key={l.id} className={cn("row-hover flex items-center gap-2 rounded border px-2 py-1.5", activeId === l.id ? "border-gold bg-gold/10 ring-1 ring-gold" : "border-transparent")}>
+              <button className="min-w-0 flex-1 text-left" onClick={() => onFocus(l)}>
+                <div className="flex items-center gap-2">
+                  <span className="truncate text-sm font-medium">{entity?.name ?? <span className="text-ink-faint">(missing record)</span>}</span>
+                  {activeId === l.id && <Badge tone="gold">selected</Badge>}
+                </div>
+                <div className="truncate text-[11px] text-ink-faint">{l.feature_type} · {l.feature_name}</div>
+              </button>
+              {entity && (
+                <Tooltip content="Open location record">
+                  <Button size="icon" variant="ghost" onClick={(e) => { e.stopPropagation(); onOpen(entity); }}>
+                    <ExternalLink size={13} />
+                  </Button>
+                </Tooltip>
+              )}
+              <Tooltip content="Unlink"><Button size="icon" variant="ghost" onClick={(e) => { e.stopPropagation(); onRemove(l.id); }}><Link2Off size={13} /></Button></Tooltip>
+            </li>
+          );
+        })}
+      </ul>
+    </div>
   );
 }
 

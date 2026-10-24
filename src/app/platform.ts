@@ -5,7 +5,7 @@
 import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import { getVersion } from "@tauri-apps/api/app";
 import { ask, confirm, message, open, save } from "@tauri-apps/plugin-dialog";
-import { revealItemInDir } from "@tauri-apps/plugin-opener";
+import { openUrl, revealItemInDir } from "@tauri-apps/plugin-opener";
 
 export const isTauri = (): boolean => typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 
@@ -88,6 +88,7 @@ export const platform = {
   ask: (text: string, title = "Question"): Promise<boolean> => (isTauri() ? ask(text, { title }) : Promise.resolve(window.confirm(text))),
   message: (text: string, title = "DM Workbench"): Promise<void> => (isTauri() ? message(text, { title }).then(() => undefined) : Promise.resolve(window.alert(text))),
   revealInFolder: (path: string): Promise<void> => revealItemInDir(path),
+  openExternal: (url: string): Promise<void> => (isTauri() ? openUrl(url) : Promise.resolve(void window.open(url, "_blank"))),
 };
 
 export const MAP_FILTER = [{ name: "Azgaar map", extensions: ["map"] }];

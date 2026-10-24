@@ -21,7 +21,15 @@
     "opener:allow-reveal-item-in-dir",
     {
       "identifier": "opener:allow-open-url",
-      "allow": [{ "url": "https://github.com/Azgaar/Fantasy-Map-Generator*" }]
+      "allow": [
+        { "url": "https://github.com/Azgaar/Fantasy-Map-Generator*" },
+        { "url": "https://*" },
+        { "url": "http://*" },
+        { "url": "https://*/*" },
+        { "url": "http://*/*" },
+        { "url": "https://*/**" },
+        { "url": "http://*/**" }
+      ]
     }
   ]
 }

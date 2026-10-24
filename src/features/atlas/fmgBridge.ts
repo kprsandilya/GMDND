@@ -138,23 +138,175 @@ export function listFeatures(win: FmgWindow): FmgFeature[] {
   return features;
 }
 
-/** Converts a click inside the iframe to map coordinates using the viewbox transform. */
-export function clientToMap(win: FmgWindow, clientX: number, clientY: number): { x: number; y: number } | null {
+function invertCtm(svg: SVGSVGElement, ctm: DOMMatrix, x: number, y: number): { x: number; y: number } | null {
+  const pt = svg.createSVGPoint();
+  pt.x = x;
+  pt.y = y;
+  try {
+    const mapped = pt.matrixTransform(ctm.inverse());
+    if (!Number.isFinite(mapped.x) || !Number.isFinite(mapped.y)) return null;
+    return { x: mapped.x, y: mapped.y };
+  } catch {
+    return null;
+  }
+}
+
+function nearestLandmarkDist2(win: FmgWindow, x: number, y: number): number {
+  const pack = win.pack;
+  if (!pack) return Infinity;
+  let best = Infinity;
+  for (const b of pack.burgs ?? []) {
+    if (!b || !b.i || b.removed) continue;
+    best = Math.min(best, dist2(b.x, b.y, x, y));
+  }
+  for (const m of pack.markers ?? []) best = Math.min(best, dist2(m.x, m.y, x, y));
+  return best;
+}
+
+/**
+ * Converts a pointer event that originated inside the generator iframe.
+ * Same path Azgaar uses: invert `#viewbox` getScreenCTM against iframe-local client coords.
+ */
+export function iframeClientToMap(win: FmgWindow, clientX: number, clientY: number): { x: number; y: number } | null {
+  const svg = win.document.getElementById("map") as SVGSVGElement | null;
+  const viewbox = win.document.getElementById("viewbox") as SVGGElement | null;
+  const screen = viewbox?.getScreenCTM();
+  if (!svg || !screen) return null;
+  return invertCtm(svg, screen, clientX, clientY);
+}
+
+/**
+ * Converts a click in the host window to generator map coordinates.
+ * WebView2 is inconsistent about whether getScreenCTM is iframe-local or parent-space, so we
+ * score every plausible mapping and keep the one closest to a real burg or marker.
+ */
+export function hostClientToMap(win: FmgWindow, hostX: number, hostY: number, iframeRect?: DOMRect | null): { x: number; y: number } | null {
   const doc = win.document;
   const svg = doc.getElementById("map") as SVGSVGElement | null;
   const viewbox = doc.getElementById("viewbox") as SVGGElement | null;
   if (!svg || !viewbox) return null;
-  const ctm = viewbox.getScreenCTM();
-  if (!ctm) return null;
-  const pt = svg.createSVGPoint();
-  pt.x = clientX;
-  pt.y = clientY;
-  const mapped = pt.matrixTransform(ctm.inverse());
-  return { x: mapped.x, y: mapped.y };
+  const frame = iframeRect ?? (() => {
+    try {
+      return (win.frameElement as HTMLElement | null)?.getBoundingClientRect() ?? null;
+    } catch {
+      return null;
+    }
+  })();
+  const svgBox = svg.getBoundingClientRect();
+  const graph = win.options?.map?.graph;
+  const inBounds = (p: { x: number; y: number }) =>
+    !graph || (p.x >= -80 && p.y >= -80 && p.x <= graph.width + 80 && p.y <= graph.height + 80);
+  const screen = viewbox.getScreenCTM();
+  const local = viewbox.getCTM();
+  const candidates = [
+    screen && frame ? invertCtm(svg, screen, hostX - frame.left, hostY - frame.top) : null,
+    screen ? invertCtm(svg, screen, hostX, hostY) : null,
+    local ? invertCtm(svg, local, hostX - svgBox.left, hostY - svgBox.top) : null,
+    local && frame ? invertCtm(svg, local, hostX - frame.left - svgBox.left, hostY - frame.top - svgBox.top) : null,
+  ].filter((p): p is { x: number; y: number } => !!p && inBounds(p));
+  if (!candidates.length) return null;
+  return candidates.reduce((best, p) => (nearestLandmarkDist2(win, p.x, p.y) < nearestLandmarkDist2(win, best.x, best.y) ? p : best));
+}
+
+export function zoomScaleFor(type: FmgFeature["type"]): number {
+  switch (type) {
+    case "burg":
+    case "marker":
+      return 20;
+    case "point":
+      return 16;
+    case "province":
+    case "river":
+      return 8;
+    case "culture":
+    case "religion":
+      return 5;
+    case "state":
+      return 3;
+    default:
+      return 8;
+  }
+}
+
+const OPEN_HOOK = "__dmWorkbenchOpenHook";
+
+function hrefOf(url: unknown): string {
+  if (typeof url === "string") return url;
+  if (url instanceof URL) return url.toString();
+  return "";
+}
+
+function burgPreviewLink(win: FmgWindow): string | null {
+  const frame = win.document.querySelector("#burgPreviewObject iframe") as HTMLIFrameElement | null;
+  const src = frame?.getAttribute("src") || frame?.src || "";
+  if (!src || src === "about:blank") return null;
+  try {
+    const url = new URL(src);
+    url.searchParams.delete("preview");
+    return url.toString();
+  } catch {
+    return /^https?:\/\//i.test(src) ? src : null;
+  }
+}
+
+/** Route the generator's window.open / openURL / "new tab" control into the host (Tauri blocks popups). */
+export function installExternalLinkHook(win: FmgWindow, open: (url: string) => void): void {
+  const flagged = win as unknown as Record<string, unknown>;
+  if (flagged[OPEN_HOOK]) return;
+  flagged[OPEN_HOOK] = true;
+
+  const go = (url: unknown) => {
+    const href = hrefOf(url);
+    if (href && /^https?:\/\//i.test(href)) open(href);
+  };
+  const hijackOpen = ((url?: string | URL) => {
+    if (url) go(url);
+    return null;
+  }) as typeof win.open;
+
+  for (const [key, value] of [
+    ["open", hijackOpen],
+    ["openURL", (url: string) => go(url)],
+  ] as const) {
+    try {
+      Object.defineProperty(win, key, { configurable: true, writable: true, value });
+    } catch {
+      try {
+        (win as unknown as Record<string, unknown>)[key] = value;
+      } catch {
+        /* WebView2 sometimes freezes window.open */
+      }
+    }
+  }
+
+  win.document.addEventListener(
+    "click",
+    (event) => {
+      const target = event.target as Element | null;
+      if (!target?.closest) return;
+      if (target.closest("#burgLinkOpen")) {
+        const link = burgPreviewLink(win);
+        if (link) {
+          event.preventDefault();
+          event.stopPropagation();
+          event.stopImmediatePropagation();
+          go(link);
+        }
+        return;
+      }
+      const anchor = target.closest("a[href]") as HTMLAnchorElement | null;
+      if (anchor && (anchor.target === "_blank" || anchor.rel.includes("noopener")) && /^https?:\/\//i.test(anchor.href)) {
+        event.preventDefault();
+        event.stopPropagation();
+        go(anchor.href);
+      }
+    },
+    true,
+  );
 }
 
 /** Finds the most specific feature near a map point: marker/burg within radius, else the province/state of the cell. */
-export function featureAt(win: FmgWindow, x: number, y: number, radius = 6): FmgFeature | null {
+export function featureAt(win: FmgWindow, x: number, y: number, radius = 28): FmgFeature | null {
   const pack = win.pack;
   if (!pack) return null;
   const r2 = radius * radius;
@@ -217,8 +369,8 @@ export function dismissUpdateDialog(win: FmgWindow): void {
   }
 }
 
-export function zoomTo(win: FmgWindow, x: number, y: number, z = 8): void {
-  win.zoomTo?.(x, y, z, 1200);
+export function zoomTo(win: FmgWindow, x: number, y: number, z = 8, duration = 1200): void {
+  win.zoomTo?.(x, y, z, duration);
 }
 
 /** Draws host-owned highlight rings for linked features inside the map's viewbox. */
@@ -236,26 +388,55 @@ export function renderOverlay(win: FmgWindow, points: { x: number; y: number; la
   g.innerHTML = "";
   for (const pt of points) {
     const active = pt.id === activeId;
-    const ring = doc.createElementNS("http://www.w3.org/2000/svg", "circle");
+    const ns = "http://www.w3.org/2000/svg";
+    if (active) {
+      const pulse = doc.createElementNS(ns, "circle");
+      pulse.setAttribute("cx", String(pt.x));
+      pulse.setAttribute("cy", String(pt.y));
+      pulse.setAttribute("r", "16");
+      pulse.setAttribute("fill", pt.color);
+      pulse.setAttribute("opacity", "0.35");
+      const animR = doc.createElementNS(ns, "animate");
+      animR.setAttribute("attributeName", "r");
+      animR.setAttribute("values", "12;28;12");
+      animR.setAttribute("dur", "1.4s");
+      animR.setAttribute("repeatCount", "indefinite");
+      pulse.appendChild(animR);
+      const animO = doc.createElementNS(ns, "animate");
+      animO.setAttribute("attributeName", "opacity");
+      animO.setAttribute("values", "0.45;0.05;0.45");
+      animO.setAttribute("dur", "1.4s");
+      animO.setAttribute("repeatCount", "indefinite");
+      pulse.appendChild(animO);
+      g.appendChild(pulse);
+    }
+    const dot = doc.createElementNS(ns, "circle");
+    dot.setAttribute("cx", String(pt.x));
+    dot.setAttribute("cy", String(pt.y));
+    dot.setAttribute("r", active ? "5" : "3");
+    dot.setAttribute("fill", pt.color);
+    dot.setAttribute("stroke", "#111");
+    dot.setAttribute("stroke-width", "0.6");
+    g.appendChild(dot);
+    const ring = doc.createElementNS(ns, "circle");
     ring.setAttribute("cx", String(pt.x));
     ring.setAttribute("cy", String(pt.y));
-    ring.setAttribute("r", active ? "7" : "4.5");
+    ring.setAttribute("r", active ? "10" : "5");
     ring.setAttribute("fill", "none");
     ring.setAttribute("stroke", pt.color);
-    ring.setAttribute("stroke-width", active ? "1.6" : "1");
-    ring.setAttribute("opacity", "0.9");
+    ring.setAttribute("stroke-width", active ? "2.2" : "1");
     g.appendChild(ring);
-    if (active) {
-      const label = doc.createElementNS("http://www.w3.org/2000/svg", "text");
-      label.setAttribute("x", String(pt.x + 8));
-      label.setAttribute("y", String(pt.y - 6));
-      label.setAttribute("font-size", "5");
-      label.setAttribute("fill", pt.color);
-      label.setAttribute("stroke", "#000");
-      label.setAttribute("stroke-width", "0.15");
-      label.textContent = pt.label;
-      g.appendChild(label);
-    }
+    const label = doc.createElementNS(ns, "text");
+    label.setAttribute("x", String(pt.x + 12));
+    label.setAttribute("y", String(pt.y - 8));
+    label.setAttribute("font-size", active ? "11" : "6");
+    label.setAttribute("font-weight", active ? "700" : "500");
+    label.setAttribute("fill", pt.color);
+    label.setAttribute("stroke", "#000");
+    label.setAttribute("stroke-width", active ? "0.45" : "0.2");
+    label.setAttribute("paint-order", "stroke");
+    label.textContent = pt.label;
+    if (pt.label) g.appendChild(label);
   }
 }
 
