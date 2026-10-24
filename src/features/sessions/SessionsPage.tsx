@@ -14,6 +14,7 @@ import { formatDate } from "@/domain/calendar";
 import { ENTITY_KINDS, KIND_LABELS, type Entity, type EntityKind, type SessionNote } from "@/domain/types";
 import { advanceCampaignDate, campaignFields, promoteNote, setActiveSession } from "@/domain/workflows/campaignWorkflow";
 import { cn, formatDateTime, relativeTime } from "@/lib/utils";
+import { SessionTravelTab } from "./SessionTravelTab";
 
 export function SessionsPage() {
   return (
@@ -28,6 +29,7 @@ export function SessionsPage() {
         banner: (e) => <LiveBar session={e} />,
         tabs: [
           { value: "plan", label: "Plan", render: (e) => <PlanTab session={e} /> },
+          { value: "travel", label: "Travel", render: (e) => <SessionTravelTab entity={e} /> },
           { value: "notes", label: "Quick notes", render: (e) => <NotesTab session={e} /> },
           { value: "log", label: "Session log", render: (e) => <LogTab session={e} /> },
           { value: "recap", label: "Recap", render: (e) => <RecapTab session={e} /> },

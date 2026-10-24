@@ -1,3 +1,4 @@
+import type { Waypoint } from "@/domain/journeyTypes";
 import { normalizeFields } from "@/domain/schemas";
 import type { Entity, EntityInput, EntityKind, EntityLink, LinkedEntity } from "@/domain/types";
 import type { Row, SqlDriver, Statement } from "../driver";
@@ -142,6 +143,24 @@ export class EntityRepository {
   }
 
   async delete(id: string): Promise<void> {
+    // Clean up waypoint JSON arrays referencing this entity before deleting it.
+    // FK CASCADE handles segment_participants and party_memberships automatically,
+    // but waypoints are stored as JSON inside travel_segments and need manual cleanup.
+    const rows = await this.db.select(
+      "SELECT id, waypoints FROM travel_segments WHERE waypoints LIKE ?",
+      [`%${id}%`],
+    );
+    for (const row of rows) {
+      const waypoints = parseJson<Waypoint[]>(row.waypoints, []);
+      const filtered = waypoints.filter((wp) => wp.entity_id !== id);
+      if (filtered.length !== waypoints.length) {
+        await this.db.execute(
+          "UPDATE travel_segments SET waypoints = ?, updated_at = ? WHERE id = ?",
+          [JSON.stringify(filtered), now(), String(row.id)],
+        );
+      }
+    }
+
     await this.db.execute("DELETE FROM entities WHERE id = ?", [id]);
   }
 

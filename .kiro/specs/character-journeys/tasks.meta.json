@@ -1,0 +1,1001 @@
+{
+  "pbtResults": {
+    "1.4 Write property test for journey name validation (Property 13)": {
+      "status": "passed",
+      "lastRunTimestamp": 1792862891102
+    },
+    "3.4 Write property test for segment cascade delete (Property 4)": {
+      "status": "passed",
+      "lastRunTimestamp": 1792864001697
+    },
+    "3.3 Write property test for journey cascade delete (Property 3)": {
+      "status": "passed",
+      "lastRunTimestamp": 1792864041582
+    },
+    "3.1 Write property test for party membership non-overlap invariant (Property 1)": {
+      "status": "passed",
+      "lastRunTimestamp": 1792864077830
+    },
+    "3.5 Write property test for timeline event sorting determinism (Property 5)": {
+      "status": "passed",
+      "lastRunTimestamp": 1792864096784
+    },
+    "3.2 Write property test for segment participant uniqueness (Property 2)": {
+      "status": "passed",
+      "lastRunTimestamp": 1792864251827
+    },
+    "3.6 Write property test for segment-journey reference integrity (Property 6)": {
+      "status": "passed",
+      "lastRunTimestamp": 1792864331982
+    },
+    "3.7 Write property test for travel history round-trip (Property 7)": {
+      "status": "passed",
+      "lastRunTimestamp": 1792864371598
+    },
+    "3.9 Write property test for filter combination conjunction (Property 10)": {
+      "status": "passed",
+      "lastRunTimestamp": 1792864379229
+    },
+    "3.10 Write property test for active membership derivation (Property 11)": {
+      "status": "passed",
+      "lastRunTimestamp": 1792864396705
+    },
+    "3.8 Write property test for membership at-session query correctness (Property 8)": {
+      "status": "passed",
+      "lastRunTimestamp": 1792864399340
+    },
+    "3.11 Write property test for entity deletion cascades (Property 12)": {
+      "status": "passed",
+      "lastRunTimestamp": 1792864508882
+    },
+    "3.12 Write property test for waypoint entity cleanup (Property 14)": {
+      "status": "passed",
+      "lastRunTimestamp": 1792864517228
+    }
+  },
+  "executionHistory": {
+    "1.1 Create `src/domain/journeyTypes.ts` with all journey-related TypeScript interfaces and type constants": [
+      {
+        "executionId": "4a5dd2d4-c350-45d7-a373-459df838b232",
+        "chatSessionId": "sess_5e8b3261-dbec-4c65-8818-df345298540a",
+        "timestamp": 1792862388147
+      },
+      {
+        "executionId": "4a5dd2d4-c350-45d7-a373-459df838b232",
+        "chatSessionId": "sess_5e8b3261-dbec-4c65-8818-df345298540a",
+        "timestamp": 1792862402495
+      },
+      {
+        "executionId": "4a5dd2d4-c350-45d7-a373-459df838b232",
+        "chatSessionId": "sess_5e8b3261-dbec-4c65-8818-df345298540a",
+        "timestamp": 1792862613423
+      }
+    ],
+    "1.2 Register `party` entity kind in the existing domain and routing infrastructure": [
+      {
+        "executionId": "4a5dd2d4-c350-45d7-a373-459df838b232",
+        "chatSessionId": "sess_5e8b3261-dbec-4c65-8818-df345298540a",
+        "timestamp": 1792862388291
+      },
+      {
+        "executionId": "4a5dd2d4-c350-45d7-a373-459df838b232",
+        "chatSessionId": "sess_5e8b3261-dbec-4c65-8818-df345298540a",
+        "timestamp": 1792862403390
+      },
+      {
+        "executionId": "4a5dd2d4-c350-45d7-a373-459df838b232",
+        "chatSessionId": "sess_5e8b3261-dbec-4c65-8818-df345298540a",
+        "timestamp": 1792862614637
+      }
+    ],
+    "1.3 Append migration version 3 to `src/persistence/migrations.ts`": [
+      {
+        "executionId": "4a5dd2d4-c350-45d7-a373-459df838b232",
+        "chatSessionId": "sess_5e8b3261-dbec-4c65-8818-df345298540a",
+        "timestamp": 1792862388436
+      },
+      {
+        "executionId": "4a5dd2d4-c350-45d7-a373-459df838b232",
+        "chatSessionId": "sess_5e8b3261-dbec-4c65-8818-df345298540a",
+        "timestamp": 1792862621208
+      },
+      {
+        "executionId": "4a5dd2d4-c350-45d7-a373-459df838b232",
+        "chatSessionId": "sess_5e8b3261-dbec-4c65-8818-df345298540a",
+        "timestamp": 1792862697222
+      }
+    ],
+    "1.4 Write property test for journey name validation (Property 13)": [
+      {
+        "executionId": "4a5dd2d4-c350-45d7-a373-459df838b232",
+        "chatSessionId": "sess_5e8b3261-dbec-4c65-8818-df345298540a",
+        "timestamp": 1792862388545
+      },
+      {
+        "executionId": "4a5dd2d4-c350-45d7-a373-459df838b232",
+        "chatSessionId": "sess_5e8b3261-dbec-4c65-8818-df345298540a",
+        "timestamp": 1792862700919
+      },
+      {
+        "executionId": "4a5dd2d4-c350-45d7-a373-459df838b232",
+        "chatSessionId": "sess_5e8b3261-dbec-4c65-8818-df345298540a",
+        "timestamp": 1792863020819
+      }
+    ],
+    "1.5 Implement `JourneyRepository` class in `src/persistence/repositories/journeys.ts` — Journey CRUD": [
+      {
+        "executionId": "4a5dd2d4-c350-45d7-a373-459df838b232",
+        "chatSessionId": "sess_5e8b3261-dbec-4c65-8818-df345298540a",
+        "timestamp": 1792862388656
+      },
+      {
+        "executionId": "4a5dd2d4-c350-45d7-a373-459df838b232",
+        "chatSessionId": "sess_5e8b3261-dbec-4c65-8818-df345298540a",
+        "timestamp": 1792862701866
+      },
+      {
+        "executionId": "4a5dd2d4-c350-45d7-a373-459df838b232",
+        "chatSessionId": "sess_5e8b3261-dbec-4c65-8818-df345298540a",
+        "timestamp": 1792863021902
+      }
+    ],
+    "1.6 Implement `JourneyRepository` — Travel Segment CRUD": [
+      {
+        "executionId": "4a5dd2d4-c350-45d7-a373-459df838b232",
+        "chatSessionId": "sess_5e8b3261-dbec-4c65-8818-df345298540a",
+        "timestamp": 1792862388773
+      },
+      {
+        "executionId": "4a5dd2d4-c350-45d7-a373-459df838b232",
+        "chatSessionId": "sess_5e8b3261-dbec-4c65-8818-df345298540a",
+        "timestamp": 1792863025778
+      },
+      {
+        "executionId": "4a5dd2d4-c350-45d7-a373-459df838b232",
+        "chatSessionId": "sess_5e8b3261-dbec-4c65-8818-df345298540a",
+        "timestamp": 1792863230697
+      }
+    ],
+    "1.7 Implement `JourneyRepository` — Segment Participants": [
+      {
+        "executionId": "4a5dd2d4-c350-45d7-a373-459df838b232",
+        "chatSessionId": "sess_5e8b3261-dbec-4c65-8818-df345298540a",
+        "timestamp": 1792862388900
+      },
+      {
+        "executionId": "4a5dd2d4-c350-45d7-a373-459df838b232",
+        "chatSessionId": "sess_5e8b3261-dbec-4c65-8818-df345298540a",
+        "timestamp": 1792863235417
+      },
+      {
+        "executionId": "4a5dd2d4-c350-45d7-a373-459df838b232",
+        "chatSessionId": "sess_5e8b3261-dbec-4c65-8818-df345298540a",
+        "timestamp": 1792863478873
+      }
+    ],
+    "1.8 Implement `JourneyRepository` — Party Memberships": [
+      {
+        "executionId": "4a5dd2d4-c350-45d7-a373-459df838b232",
+        "chatSessionId": "sess_5e8b3261-dbec-4c65-8818-df345298540a",
+        "timestamp": 1792862389039
+      },
+      {
+        "executionId": "4a5dd2d4-c350-45d7-a373-459df838b232",
+        "chatSessionId": "sess_5e8b3261-dbec-4c65-8818-df345298540a",
+        "timestamp": 1792863026635
+      },
+      {
+        "executionId": "4a5dd2d4-c350-45d7-a373-459df838b232",
+        "chatSessionId": "sess_5e8b3261-dbec-4c65-8818-df345298540a",
+        "timestamp": 1792863231558
+      }
+    ],
+    "1.9 Implement `JourneyRepository` — Timeline Event Participants and Extended Queries": [
+      {
+        "executionId": "4a5dd2d4-c350-45d7-a373-459df838b232",
+        "chatSessionId": "sess_5e8b3261-dbec-4c65-8818-df345298540a",
+        "timestamp": 1792862389176
+      },
+      {
+        "executionId": "4a5dd2d4-c350-45d7-a373-459df838b232",
+        "chatSessionId": "sess_5e8b3261-dbec-4c65-8818-df345298540a",
+        "timestamp": 1792863237642
+      },
+      {
+        "executionId": "4a5dd2d4-c350-45d7-a373-459df838b232",
+        "chatSessionId": "sess_5e8b3261-dbec-4c65-8818-df345298540a",
+        "timestamp": 1792863479970
+      }
+    ],
+    "1.10 Implement `JourneyRepository` — Enriched Queries and Waypoint Cleanup": [
+      {
+        "executionId": "4a5dd2d4-c350-45d7-a373-459df838b232",
+        "chatSessionId": "sess_5e8b3261-dbec-4c65-8818-df345298540a",
+        "timestamp": 1792862389290
+      },
+      {
+        "executionId": "4a5dd2d4-c350-45d7-a373-459df838b232",
+        "chatSessionId": "sess_5e8b3261-dbec-4c65-8818-df345298540a",
+        "timestamp": 1792863484186
+      },
+      {
+        "executionId": "4a5dd2d4-c350-45d7-a373-459df838b232",
+        "chatSessionId": "sess_5e8b3261-dbec-4c65-8818-df345298540a",
+        "timestamp": 1792863805980
+      }
+    ],
+    "1.11 Export `JourneyRepository` from `src/persistence/repositories/index.ts`": [
+      {
+        "executionId": "4a5dd2d4-c350-45d7-a373-459df838b232",
+        "chatSessionId": "sess_5e8b3261-dbec-4c65-8818-df345298540a",
+        "timestamp": 1792862389403
+      },
+      {
+        "executionId": "4a5dd2d4-c350-45d7-a373-459df838b232",
+        "chatSessionId": "sess_5e8b3261-dbec-4c65-8818-df345298540a",
+        "timestamp": 1792863485020
+      },
+      {
+        "executionId": "4a5dd2d4-c350-45d7-a373-459df838b232",
+        "chatSessionId": "sess_5e8b3261-dbec-4c65-8818-df345298540a",
+        "timestamp": 1792863806835
+      }
+    ],
+    "1.12 Extend `TimelineRepository` in `src/persistence/repositories/misc.ts` for enriched timeline queries": [
+      {
+        "executionId": "4a5dd2d4-c350-45d7-a373-459df838b232",
+        "chatSessionId": "sess_5e8b3261-dbec-4c65-8818-df345298540a",
+        "timestamp": 1792862389526
+      },
+      {
+        "executionId": "4a5dd2d4-c350-45d7-a373-459df838b232",
+        "chatSessionId": "sess_5e8b3261-dbec-4c65-8818-df345298540a",
+        "timestamp": 1792863485974
+      },
+      {
+        "executionId": "4a5dd2d4-c350-45d7-a373-459df838b232",
+        "chatSessionId": "sess_5e8b3261-dbec-4c65-8818-df345298540a",
+        "timestamp": 1792863808046
+      }
+    ],
+    "2. Checkpoint — Data model complete": [
+      {
+        "executionId": "4a5dd2d4-c350-45d7-a373-459df838b232",
+        "chatSessionId": "sess_5e8b3261-dbec-4c65-8818-df345298540a",
+        "timestamp": 1792862389638
+      },
+      {
+        "executionId": "4a5dd2d4-c350-45d7-a373-459df838b232",
+        "chatSessionId": "sess_5e8b3261-dbec-4c65-8818-df345298540a",
+        "timestamp": 1792863824804
+      },
+      {
+        "executionId": "4a5dd2d4-c350-45d7-a373-459df838b232",
+        "chatSessionId": "sess_5e8b3261-dbec-4c65-8818-df345298540a",
+        "timestamp": 1792863876603
+      }
+    ],
+    "3.1 Write property test for party membership non-overlap invariant (Property 1)": [
+      {
+        "executionId": "4a5dd2d4-c350-45d7-a373-459df838b232",
+        "chatSessionId": "sess_5e8b3261-dbec-4c65-8818-df345298540a",
+        "timestamp": 1792862389746
+      },
+      {
+        "executionId": "4a5dd2d4-c350-45d7-a373-459df838b232",
+        "chatSessionId": "sess_5e8b3261-dbec-4c65-8818-df345298540a",
+        "timestamp": 1792863880885
+      },
+      {
+        "executionId": "4a5dd2d4-c350-45d7-a373-459df838b232",
+        "chatSessionId": "sess_5e8b3261-dbec-4c65-8818-df345298540a",
+        "timestamp": 1792864263599
+      }
+    ],
+    "3.2 Write property test for segment participant uniqueness (Property 2)": [
+      {
+        "executionId": "4a5dd2d4-c350-45d7-a373-459df838b232",
+        "chatSessionId": "sess_5e8b3261-dbec-4c65-8818-df345298540a",
+        "timestamp": 1792862389856
+      },
+      {
+        "executionId": "4a5dd2d4-c350-45d7-a373-459df838b232",
+        "chatSessionId": "sess_5e8b3261-dbec-4c65-8818-df345298540a",
+        "timestamp": 1792863881665
+      },
+      {
+        "executionId": "4a5dd2d4-c350-45d7-a373-459df838b232",
+        "chatSessionId": "sess_5e8b3261-dbec-4c65-8818-df345298540a",
+        "timestamp": 1792864264401
+      }
+    ],
+    "3.3 Write property test for journey cascade delete (Property 3)": [
+      {
+        "executionId": "4a5dd2d4-c350-45d7-a373-459df838b232",
+        "chatSessionId": "sess_5e8b3261-dbec-4c65-8818-df345298540a",
+        "timestamp": 1792862389984
+      },
+      {
+        "executionId": "4a5dd2d4-c350-45d7-a373-459df838b232",
+        "chatSessionId": "sess_5e8b3261-dbec-4c65-8818-df345298540a",
+        "timestamp": 1792863882505
+      },
+      {
+        "executionId": "4a5dd2d4-c350-45d7-a373-459df838b232",
+        "chatSessionId": "sess_5e8b3261-dbec-4c65-8818-df345298540a",
+        "timestamp": 1792864265203
+      }
+    ],
+    "3.4 Write property test for segment cascade delete (Property 4)": [
+      {
+        "executionId": "4a5dd2d4-c350-45d7-a373-459df838b232",
+        "chatSessionId": "sess_5e8b3261-dbec-4c65-8818-df345298540a",
+        "timestamp": 1792862390205
+      },
+      {
+        "executionId": "4a5dd2d4-c350-45d7-a373-459df838b232",
+        "chatSessionId": "sess_5e8b3261-dbec-4c65-8818-df345298540a",
+        "timestamp": 1792863883285
+      },
+      {
+        "executionId": "4a5dd2d4-c350-45d7-a373-459df838b232",
+        "chatSessionId": "sess_5e8b3261-dbec-4c65-8818-df345298540a",
+        "timestamp": 1792864267256
+      }
+    ],
+    "3.5 Write property test for timeline event sorting determinism (Property 5)": [
+      {
+        "executionId": "4a5dd2d4-c350-45d7-a373-459df838b232",
+        "chatSessionId": "sess_5e8b3261-dbec-4c65-8818-df345298540a",
+        "timestamp": 1792862390346
+      },
+      {
+        "executionId": "4a5dd2d4-c350-45d7-a373-459df838b232",
+        "chatSessionId": "sess_5e8b3261-dbec-4c65-8818-df345298540a",
+        "timestamp": 1792863884110
+      },
+      {
+        "executionId": "4a5dd2d4-c350-45d7-a373-459df838b232",
+        "chatSessionId": "sess_5e8b3261-dbec-4c65-8818-df345298540a",
+        "timestamp": 1792864267377
+      }
+    ],
+    "3.6 Write property test for segment-journey reference integrity (Property 6)": [
+      {
+        "executionId": "4a5dd2d4-c350-45d7-a373-459df838b232",
+        "chatSessionId": "sess_5e8b3261-dbec-4c65-8818-df345298540a",
+        "timestamp": 1792862390473
+      },
+      {
+        "executionId": "4a5dd2d4-c350-45d7-a373-459df838b232",
+        "chatSessionId": "sess_5e8b3261-dbec-4c65-8818-df345298540a",
+        "timestamp": 1792864271392
+      },
+      {
+        "executionId": "4a5dd2d4-c350-45d7-a373-459df838b232",
+        "chatSessionId": "sess_5e8b3261-dbec-4c65-8818-df345298540a",
+        "timestamp": 1792864414698
+      }
+    ],
+    "3.7 Write property test for travel history round-trip (Property 7)": [
+      {
+        "executionId": "4a5dd2d4-c350-45d7-a373-459df838b232",
+        "chatSessionId": "sess_5e8b3261-dbec-4c65-8818-df345298540a",
+        "timestamp": 1792862390624
+      },
+      {
+        "executionId": "4a5dd2d4-c350-45d7-a373-459df838b232",
+        "chatSessionId": "sess_5e8b3261-dbec-4c65-8818-df345298540a",
+        "timestamp": 1792864272134
+      },
+      {
+        "executionId": "4a5dd2d4-c350-45d7-a373-459df838b232",
+        "chatSessionId": "sess_5e8b3261-dbec-4c65-8818-df345298540a",
+        "timestamp": 1792864414949
+      }
+    ],
+    "3.8 Write property test for membership at-session query correctness (Property 8)": [
+      {
+        "executionId": "4a5dd2d4-c350-45d7-a373-459df838b232",
+        "chatSessionId": "sess_5e8b3261-dbec-4c65-8818-df345298540a",
+        "timestamp": 1792862390767
+      },
+      {
+        "executionId": "4a5dd2d4-c350-45d7-a373-459df838b232",
+        "chatSessionId": "sess_5e8b3261-dbec-4c65-8818-df345298540a",
+        "timestamp": 1792864273023
+      },
+      {
+        "executionId": "4a5dd2d4-c350-45d7-a373-459df838b232",
+        "chatSessionId": "sess_5e8b3261-dbec-4c65-8818-df345298540a",
+        "timestamp": 1792864415089
+      }
+    ],
+    "3.9 Write property test for filter combination conjunction (Property 10)": [
+      {
+        "executionId": "4a5dd2d4-c350-45d7-a373-459df838b232",
+        "chatSessionId": "sess_5e8b3261-dbec-4c65-8818-df345298540a",
+        "timestamp": 1792862390893
+      },
+      {
+        "executionId": "4a5dd2d4-c350-45d7-a373-459df838b232",
+        "chatSessionId": "sess_5e8b3261-dbec-4c65-8818-df345298540a",
+        "timestamp": 1792864273863
+      },
+      {
+        "executionId": "4a5dd2d4-c350-45d7-a373-459df838b232",
+        "chatSessionId": "sess_5e8b3261-dbec-4c65-8818-df345298540a",
+        "timestamp": 1792864415233
+      }
+    ],
+    "3.10 Write property test for active membership derivation (Property 11)": [
+      {
+        "executionId": "4a5dd2d4-c350-45d7-a373-459df838b232",
+        "chatSessionId": "sess_5e8b3261-dbec-4c65-8818-df345298540a",
+        "timestamp": 1792862391014
+      },
+      {
+        "executionId": "4a5dd2d4-c350-45d7-a373-459df838b232",
+        "chatSessionId": "sess_5e8b3261-dbec-4c65-8818-df345298540a",
+        "timestamp": 1792864274686
+      },
+      {
+        "executionId": "4a5dd2d4-c350-45d7-a373-459df838b232",
+        "chatSessionId": "sess_5e8b3261-dbec-4c65-8818-df345298540a",
+        "timestamp": 1792864415472
+      }
+    ],
+    "3.11 Write property test for entity deletion cascades (Property 12)": [
+      {
+        "executionId": "4a5dd2d4-c350-45d7-a373-459df838b232",
+        "chatSessionId": "sess_5e8b3261-dbec-4c65-8818-df345298540a",
+        "timestamp": 1792862391119
+      },
+      {
+        "executionId": "4a5dd2d4-c350-45d7-a373-459df838b232",
+        "chatSessionId": "sess_5e8b3261-dbec-4c65-8818-df345298540a",
+        "timestamp": 1792864419537
+      },
+      {
+        "executionId": "4a5dd2d4-c350-45d7-a373-459df838b232",
+        "chatSessionId": "sess_5e8b3261-dbec-4c65-8818-df345298540a",
+        "timestamp": 1792864529131
+      }
+    ],
+    "3.12 Write property test for waypoint entity cleanup (Property 14)": [
+      {
+        "executionId": "4a5dd2d4-c350-45d7-a373-459df838b232",
+        "chatSessionId": "sess_5e8b3261-dbec-4c65-8818-df345298540a",
+        "timestamp": 1792862391243
+      },
+      {
+        "executionId": "4a5dd2d4-c350-45d7-a373-459df838b232",
+        "chatSessionId": "sess_5e8b3261-dbec-4c65-8818-df345298540a",
+        "timestamp": 1792864420377
+      },
+      {
+        "executionId": "4a5dd2d4-c350-45d7-a373-459df838b232",
+        "chatSessionId": "sess_5e8b3261-dbec-4c65-8818-df345298540a",
+        "timestamp": 1792864529932
+      }
+    ],
+    "4.1 Create `src/features/characters/JourneyTimelineTab.tsx` — Journey & Timeline tab for PC/NPC detail": [
+      {
+        "executionId": "4a5dd2d4-c350-45d7-a373-459df838b232",
+        "chatSessionId": "sess_5e8b3261-dbec-4c65-8818-df345298540a",
+        "timestamp": 1792862391361
+      },
+      {
+        "executionId": "4a5dd2d4-c350-45d7-a373-459df838b232",
+        "chatSessionId": "sess_5e8b3261-dbec-4c65-8818-df345298540a",
+        "timestamp": 1792864540981
+      },
+      {
+        "executionId": "4a5dd2d4-c350-45d7-a373-459df838b232",
+        "chatSessionId": "sess_5e8b3261-dbec-4c65-8818-df345298540a",
+        "timestamp": 1792864835238
+      }
+    ],
+    "4.2 Create `src/features/characters/DmReferenceTab.tsx` — DM Reference tab for PC/NPC detail": [
+      {
+        "executionId": "4a5dd2d4-c350-45d7-a373-459df838b232",
+        "chatSessionId": "sess_5e8b3261-dbec-4c65-8818-df345298540a",
+        "timestamp": 1792862391479
+      },
+      {
+        "executionId": "4a5dd2d4-c350-45d7-a373-459df838b232",
+        "chatSessionId": "sess_5e8b3261-dbec-4c65-8818-df345298540a",
+        "timestamp": 1792864541887
+      },
+      {
+        "executionId": "4a5dd2d4-c350-45d7-a373-459df838b232",
+        "chatSessionId": "sess_5e8b3261-dbec-4c65-8818-df345298540a",
+        "timestamp": 1792864836127
+      }
+    ],
+    "4.3 Integrate new tabs into `src/features/characters/CharactersPage.tsx`": [
+      {
+        "executionId": "4a5dd2d4-c350-45d7-a373-459df838b232",
+        "chatSessionId": "sess_5e8b3261-dbec-4c65-8818-df345298540a",
+        "timestamp": 1792862391591
+      },
+      {
+        "executionId": "4a5dd2d4-c350-45d7-a373-459df838b232",
+        "chatSessionId": "sess_5e8b3261-dbec-4c65-8818-df345298540a",
+        "timestamp": 1792864844315
+      },
+      {
+        "executionId": "4a5dd2d4-c350-45d7-a373-459df838b232",
+        "chatSessionId": "sess_5e8b3261-dbec-4c65-8818-df345298540a",
+        "timestamp": 1792865070211
+      }
+    ],
+    "4.4 Create `src/features/parties/PartiesPage.tsx` — Party entity workspace": [
+      {
+        "executionId": "4a5dd2d4-c350-45d7-a373-459df838b232",
+        "chatSessionId": "sess_5e8b3261-dbec-4c65-8818-df345298540a",
+        "timestamp": 1792862391705
+      },
+      {
+        "executionId": "4a5dd2d4-c350-45d7-a373-459df838b232",
+        "chatSessionId": "sess_5e8b3261-dbec-4c65-8818-df345298540a",
+        "timestamp": 1792864542730
+      },
+      {
+        "executionId": "4a5dd2d4-c350-45d7-a373-459df838b232",
+        "chatSessionId": "sess_5e8b3261-dbec-4c65-8818-df345298540a",
+        "timestamp": 1792864837096
+      }
+    ],
+    "4.5 Add party routes to `src/app/router.tsx`": [
+      {
+        "executionId": "4a5dd2d4-c350-45d7-a373-459df838b232",
+        "chatSessionId": "sess_5e8b3261-dbec-4c65-8818-df345298540a",
+        "timestamp": 1792862391820
+      },
+      {
+        "executionId": "4a5dd2d4-c350-45d7-a373-459df838b232",
+        "chatSessionId": "sess_5e8b3261-dbec-4c65-8818-df345298540a",
+        "timestamp": 1792864845138
+      },
+      {
+        "executionId": "4a5dd2d4-c350-45d7-a373-459df838b232",
+        "chatSessionId": "sess_5e8b3261-dbec-4c65-8818-df345298540a",
+        "timestamp": 1792865071047
+      }
+    ],
+    "4.6 Write unit tests for JourneyTimelineTab and PartiesPage": [
+      {
+        "executionId": "4a5dd2d4-c350-45d7-a373-459df838b232",
+        "chatSessionId": "sess_5e8b3261-dbec-4c65-8818-df345298540a",
+        "timestamp": 1792862391927
+      },
+      {
+        "executionId": "4a5dd2d4-c350-45d7-a373-459df838b232",
+        "chatSessionId": "sess_5e8b3261-dbec-4c65-8818-df345298540a",
+        "timestamp": 1792864846021
+      },
+      {
+        "executionId": "4a5dd2d4-c350-45d7-a373-459df838b232",
+        "chatSessionId": "sess_5e8b3261-dbec-4c65-8818-df345298540a",
+        "timestamp": 1792865072084
+      }
+    ],
+    "5. Checkpoint — Individual timelines and party view functional": [
+      {
+        "executionId": "4a5dd2d4-c350-45d7-a373-459df838b232",
+        "chatSessionId": "sess_5e8b3261-dbec-4c65-8818-df345298540a",
+        "timestamp": 1792862392035
+      },
+      {
+        "executionId": "4a5dd2d4-c350-45d7-a373-459df838b232",
+        "chatSessionId": "sess_5e8b3261-dbec-4c65-8818-df345298540a",
+        "timestamp": 1792865077653
+      },
+      {
+        "executionId": "4a5dd2d4-c350-45d7-a373-459df838b232",
+        "chatSessionId": "sess_5e8b3261-dbec-4c65-8818-df345298540a",
+        "timestamp": 1792865169267
+      }
+    ],
+    "6.1 Create `src/features/atlas/RouteOverlay.tsx` — SVG route polyline rendering": [
+      {
+        "executionId": "4a5dd2d4-c350-45d7-a373-459df838b232",
+        "chatSessionId": "sess_5e8b3261-dbec-4c65-8818-df345298540a",
+        "timestamp": 1792862392152
+      },
+      {
+        "executionId": "4a5dd2d4-c350-45d7-a373-459df838b232",
+        "chatSessionId": "sess_5e8b3261-dbec-4c65-8818-df345298540a",
+        "timestamp": 1792865174127
+      },
+      {
+        "executionId": "4a5dd2d4-c350-45d7-a373-459df838b232",
+        "chatSessionId": "sess_5e8b3261-dbec-4c65-8818-df345298540a",
+        "timestamp": 1792866345424
+      }
+    ],
+    "6.2 Create `src/features/atlas/JourneyFilterToolbar.tsx` — Filter controls": [
+      {
+        "executionId": "4a5dd2d4-c350-45d7-a373-459df838b232",
+        "chatSessionId": "sess_5e8b3261-dbec-4c65-8818-df345298540a",
+        "timestamp": 1792862392294
+      },
+      {
+        "executionId": "4a5dd2d4-c350-45d7-a373-459df838b232",
+        "chatSessionId": "sess_5e8b3261-dbec-4c65-8818-df345298540a",
+        "timestamp": 1792865175009
+      },
+      {
+        "executionId": "4a5dd2d4-c350-45d7-a373-459df838b232",
+        "chatSessionId": "sess_5e8b3261-dbec-4c65-8818-df345298540a",
+        "timestamp": 1792866347516
+      }
+    ],
+    "6.3 Create `src/features/atlas/SegmentDetailPanel.tsx` — Contextual side panel for route clicks": [
+      {
+        "executionId": "4a5dd2d4-c350-45d7-a373-459df838b232",
+        "chatSessionId": "sess_5e8b3261-dbec-4c65-8818-df345298540a",
+        "timestamp": 1792862392487
+      },
+      {
+        "executionId": "4a5dd2d4-c350-45d7-a373-459df838b232",
+        "chatSessionId": "sess_5e8b3261-dbec-4c65-8818-df345298540a",
+        "timestamp": 1792865175890
+      },
+      {
+        "executionId": "4a5dd2d4-c350-45d7-a373-459df838b232",
+        "chatSessionId": "sess_5e8b3261-dbec-4c65-8818-df345298540a",
+        "timestamp": 1792866347683
+      }
+    ],
+    "6.4 Integrate journey overlay into `src/features/atlas/AtlasPage.tsx`": [
+      {
+        "executionId": "4a5dd2d4-c350-45d7-a373-459df838b232",
+        "chatSessionId": "sess_5e8b3261-dbec-4c65-8818-df345298540a",
+        "timestamp": 1792862392594
+      },
+      {
+        "executionId": "4a5dd2d4-c350-45d7-a373-459df838b232",
+        "chatSessionId": "sess_5e8b3261-dbec-4c65-8818-df345298540a",
+        "timestamp": 1792866354954
+      },
+      {
+        "executionId": "4a5dd2d4-c350-45d7-a373-459df838b232",
+        "chatSessionId": "sess_5e8b3261-dbec-4c65-8818-df345298540a",
+        "timestamp": 1792870218059
+      }
+    ],
+    "6.5 Write unit tests for route overlay rendering and filter logic": [
+      {
+        "executionId": "4a5dd2d4-c350-45d7-a373-459df838b232",
+        "chatSessionId": "sess_5e8b3261-dbec-4c65-8818-df345298540a",
+        "timestamp": 1792862392715
+      },
+      {
+        "executionId": "4a5dd2d4-c350-45d7-a373-459df838b232",
+        "chatSessionId": "sess_5e8b3261-dbec-4c65-8818-df345298540a",
+        "timestamp": 1792866355814
+      },
+      {
+        "executionId": "4a5dd2d4-c350-45d7-a373-459df838b232",
+        "chatSessionId": "sess_5e8b3261-dbec-4c65-8818-df345298540a",
+        "timestamp": 1792870219088
+      }
+    ],
+    "7. Checkpoint — Atlas route overlay functional": [
+      {
+        "executionId": "4a5dd2d4-c350-45d7-a373-459df838b232",
+        "chatSessionId": "sess_5e8b3261-dbec-4c65-8818-df345298540a",
+        "timestamp": 1792862392823
+      },
+      {
+        "executionId": "4a5dd2d4-c350-45d7-a373-459df838b232",
+        "chatSessionId": "sess_5e8b3261-dbec-4c65-8818-df345298540a",
+        "timestamp": 1792870223624
+      },
+      {
+        "executionId": "4a5dd2d4-c350-45d7-a373-459df838b232",
+        "chatSessionId": "sess_5e8b3261-dbec-4c65-8818-df345298540a",
+        "timestamp": 1792870227388
+      }
+    ],
+    "8.1 Create `src/features/sessions/SessionTravelTab.tsx` — Travel tab for session detail": [
+      {
+        "executionId": "4a5dd2d4-c350-45d7-a373-459df838b232",
+        "chatSessionId": "sess_5e8b3261-dbec-4c65-8818-df345298540a",
+        "timestamp": 1792862392932
+      },
+      {
+        "executionId": "4a5dd2d4-c350-45d7-a373-459df838b232",
+        "chatSessionId": "sess_5e8b3261-dbec-4c65-8818-df345298540a",
+        "timestamp": 1792870232172
+      },
+      {
+        "executionId": "4a5dd2d4-c350-45d7-a373-459df838b232",
+        "chatSessionId": "sess_5e8b3261-dbec-4c65-8818-df345298540a",
+        "timestamp": 1792870909283
+      }
+    ],
+    "8.2 Integrate `SessionTravelTab` into `src/features/sessions/SessionsPage.tsx`": [
+      {
+        "executionId": "4a5dd2d4-c350-45d7-a373-459df838b232",
+        "chatSessionId": "sess_5e8b3261-dbec-4c65-8818-df345298540a",
+        "timestamp": 1792862393047
+      },
+      {
+        "executionId": "4a5dd2d4-c350-45d7-a373-459df838b232",
+        "chatSessionId": "sess_5e8b3261-dbec-4c65-8818-df345298540a",
+        "timestamp": 1792870916157
+      },
+      {
+        "executionId": "4a5dd2d4-c350-45d7-a373-459df838b232",
+        "chatSessionId": "sess_5e8b3261-dbec-4c65-8818-df345298540a",
+        "timestamp": 1792871186358
+      }
+    ],
+    "8.3 Create `src/features/journeys/JourneyEditor.tsx` — Shared journey/segment/participant editor dialog": [
+      {
+        "executionId": "4a5dd2d4-c350-45d7-a373-459df838b232",
+        "chatSessionId": "sess_5e8b3261-dbec-4c65-8818-df345298540a",
+        "timestamp": 1792862393166
+      },
+      {
+        "executionId": "4a5dd2d4-c350-45d7-a373-459df838b232",
+        "chatSessionId": "sess_5e8b3261-dbec-4c65-8818-df345298540a",
+        "timestamp": 1792870233081
+      },
+      {
+        "executionId": "4a5dd2d4-c350-45d7-a373-459df838b232",
+        "chatSessionId": "sess_5e8b3261-dbec-4c65-8818-df345298540a",
+        "timestamp": 1792870910065
+      }
+    ],
+    "8.4 Create `src/features/locations/VisitHistorySection.tsx` — Visit history for location detail": [
+      {
+        "executionId": "4a5dd2d4-c350-45d7-a373-459df838b232",
+        "chatSessionId": "sess_5e8b3261-dbec-4c65-8818-df345298540a",
+        "timestamp": 1792862393276
+      },
+      {
+        "executionId": "4a5dd2d4-c350-45d7-a373-459df838b232",
+        "chatSessionId": "sess_5e8b3261-dbec-4c65-8818-df345298540a",
+        "timestamp": 1792870233974
+      },
+      {
+        "executionId": "4a5dd2d4-c350-45d7-a373-459df838b232",
+        "chatSessionId": "sess_5e8b3261-dbec-4c65-8818-df345298540a",
+        "timestamp": 1792870911072
+      }
+    ],
+    "8.5 Integrate `VisitHistorySection` into `src/features/locations/LocationsPage.tsx`": [
+      {
+        "executionId": "4a5dd2d4-c350-45d7-a373-459df838b232",
+        "chatSessionId": "sess_5e8b3261-dbec-4c65-8818-df345298540a",
+        "timestamp": 1792862393389
+      },
+      {
+        "executionId": "4a5dd2d4-c350-45d7-a373-459df838b232",
+        "chatSessionId": "sess_5e8b3261-dbec-4c65-8818-df345298540a",
+        "timestamp": 1792870916975
+      },
+      {
+        "executionId": "4a5dd2d4-c350-45d7-a373-459df838b232",
+        "chatSessionId": "sess_5e8b3261-dbec-4c65-8818-df345298540a",
+        "timestamp": 1792871187075
+      }
+    ],
+    "8.6 Add \"Show on atlas\" action to character journey view": [
+      {
+        "executionId": "4a5dd2d4-c350-45d7-a373-459df838b232",
+        "chatSessionId": "sess_5e8b3261-dbec-4c65-8818-df345298540a",
+        "timestamp": 1792862393505
+      },
+      {
+        "executionId": "4a5dd2d4-c350-45d7-a373-459df838b232",
+        "chatSessionId": "sess_5e8b3261-dbec-4c65-8818-df345298540a",
+        "timestamp": 1792870917815
+      },
+      {
+        "executionId": "4a5dd2d4-c350-45d7-a373-459df838b232",
+        "chatSessionId": "sess_5e8b3261-dbec-4c65-8818-df345298540a",
+        "timestamp": 1792871188029
+      }
+    ],
+    "8.7 Wire entity deletion to journey system cleanup": [
+      {
+        "executionId": "4a5dd2d4-c350-45d7-a373-459df838b232",
+        "chatSessionId": "sess_5e8b3261-dbec-4c65-8818-df345298540a",
+        "timestamp": 1792862393616
+      },
+      {
+        "executionId": "4a5dd2d4-c350-45d7-a373-459df838b232",
+        "chatSessionId": "sess_5e8b3261-dbec-4c65-8818-df345298540a",
+        "timestamp": 1792870918611
+      },
+      {
+        "executionId": "4a5dd2d4-c350-45d7-a373-459df838b232",
+        "chatSessionId": "sess_5e8b3261-dbec-4c65-8818-df345298540a",
+        "timestamp": 1792871188833
+      }
+    ],
+    "8.8 Write unit tests for SessionTravelTab, JourneyEditor, and VisitHistorySection": [
+      {
+        "executionId": "4a5dd2d4-c350-45d7-a373-459df838b232",
+        "chatSessionId": "sess_5e8b3261-dbec-4c65-8818-df345298540a",
+        "timestamp": 1792862393729
+      },
+      {
+        "executionId": "4a5dd2d4-c350-45d7-a373-459df838b232",
+        "chatSessionId": "sess_5e8b3261-dbec-4c65-8818-df345298540a",
+        "timestamp": 1792870919527
+      },
+      {
+        "executionId": "4a5dd2d4-c350-45d7-a373-459df838b232",
+        "chatSessionId": "sess_5e8b3261-dbec-4c65-8818-df345298540a",
+        "timestamp": 1792871189984
+      }
+    ],
+    "9. Checkpoint — Session integration and editing workflows complete": [
+      {
+        "executionId": "4a5dd2d4-c350-45d7-a373-459df838b232",
+        "chatSessionId": "sess_5e8b3261-dbec-4c65-8818-df345298540a",
+        "timestamp": 1792862393856
+      },
+      {
+        "executionId": "4a5dd2d4-c350-45d7-a373-459df838b232",
+        "chatSessionId": "sess_5e8b3261-dbec-4c65-8818-df345298540a",
+        "timestamp": 1792871197288
+      },
+      {
+        "executionId": "4a5dd2d4-c350-45d7-a373-459df838b232",
+        "chatSessionId": "sess_5e8b3261-dbec-4c65-8818-df345298540a",
+        "timestamp": 1792871201303
+      }
+    ],
+    "10.1 Create `src/features/atlas/JourneyPlayback.tsx` — Timeline slider with playback controls": [
+      {
+        "executionId": "4a5dd2d4-c350-45d7-a373-459df838b232",
+        "chatSessionId": "sess_5e8b3261-dbec-4c65-8818-df345298540a",
+        "timestamp": 1792862393970
+      },
+      {
+        "executionId": "4a5dd2d4-c350-45d7-a373-459df838b232",
+        "chatSessionId": "sess_5e8b3261-dbec-4c65-8818-df345298540a",
+        "timestamp": 1792871205841
+      },
+      {
+        "executionId": "4a5dd2d4-c350-45d7-a373-459df838b232",
+        "chatSessionId": "sess_5e8b3261-dbec-4c65-8818-df345298540a",
+        "timestamp": 1792871485229
+      }
+    ],
+    "10.2 Create `src/features/atlas/RouteComparison.tsx` — Character route comparison panel": [
+      {
+        "executionId": "4a5dd2d4-c350-45d7-a373-459df838b232",
+        "chatSessionId": "sess_5e8b3261-dbec-4c65-8818-df345298540a",
+        "timestamp": 1792862394079
+      },
+      {
+        "executionId": "4a5dd2d4-c350-45d7-a373-459df838b232",
+        "chatSessionId": "sess_5e8b3261-dbec-4c65-8818-df345298540a",
+        "timestamp": 1792871206859
+      },
+      {
+        "executionId": "4a5dd2d4-c350-45d7-a373-459df838b232",
+        "chatSessionId": "sess_5e8b3261-dbec-4c65-8818-df345298540a",
+        "timestamp": 1792871486263
+      }
+    ],
+    "10.3 Integrate playback and comparison into `AtlasPage.tsx`": [
+      {
+        "executionId": "4a5dd2d4-c350-45d7-a373-459df838b232",
+        "chatSessionId": "sess_5e8b3261-dbec-4c65-8818-df345298540a",
+        "timestamp": 1792862394200
+      },
+      {
+        "executionId": "4a5dd2d4-c350-45d7-a373-459df838b232",
+        "chatSessionId": "sess_5e8b3261-dbec-4c65-8818-df345298540a",
+        "timestamp": 1792871492001
+      },
+      {
+        "executionId": "4a5dd2d4-c350-45d7-a373-459df838b232",
+        "chatSessionId": "sess_5e8b3261-dbec-4c65-8818-df345298540a",
+        "timestamp": 1792871859695
+      }
+    ],
+    "10.4 Wire location visit history into atlas overlay": [
+      {
+        "executionId": "4a5dd2d4-c350-45d7-a373-459df838b232",
+        "chatSessionId": "sess_5e8b3261-dbec-4c65-8818-df345298540a",
+        "timestamp": 1792862394321
+      },
+      {
+        "executionId": "4a5dd2d4-c350-45d7-a373-459df838b232",
+        "chatSessionId": "sess_5e8b3261-dbec-4c65-8818-df345298540a",
+        "timestamp": 1792871492789
+      },
+      {
+        "executionId": "4a5dd2d4-c350-45d7-a373-459df838b232",
+        "chatSessionId": "sess_5e8b3261-dbec-4c65-8818-df345298540a",
+        "timestamp": 1792871861424
+      }
+    ],
+    "10.5 Write unit tests for JourneyPlayback and RouteComparison": [
+      {
+        "executionId": "4a5dd2d4-c350-45d7-a373-459df838b232",
+        "chatSessionId": "sess_5e8b3261-dbec-4c65-8818-df345298540a",
+        "timestamp": 1792862394451
+      },
+      {
+        "executionId": "4a5dd2d4-c350-45d7-a373-459df838b232",
+        "chatSessionId": "sess_5e8b3261-dbec-4c65-8818-df345298540a",
+        "timestamp": 1792871491093
+      },
+      {
+        "executionId": "4a5dd2d4-c350-45d7-a373-459df838b232",
+        "chatSessionId": "sess_5e8b3261-dbec-4c65-8818-df345298540a",
+        "timestamp": 1792871860651
+      }
+    ],
+    "11. Final checkpoint — All features integrated": [
+      {
+        "executionId": "4a5dd2d4-c350-45d7-a373-459df838b232",
+        "chatSessionId": "sess_5e8b3261-dbec-4c65-8818-df345298540a",
+        "timestamp": 1792862394561
+      },
+      {
+        "executionId": "4a5dd2d4-c350-45d7-a373-459df838b232",
+        "chatSessionId": "sess_5e8b3261-dbec-4c65-8818-df345298540a",
+        "timestamp": 1792871866466
+      },
+      {
+        "executionId": "4a5dd2d4-c350-45d7-a373-459df838b232",
+        "chatSessionId": "sess_5e8b3261-dbec-4c65-8818-df345298540a",
+        "timestamp": 1792871898353
+      }
+    ],
+    "1. Phase 1 — Data Model, Domain Types, and Individual Timelines": [
+      {
+        "executionId": "4a5dd2d4-c350-45d7-a373-459df838b232",
+        "chatSessionId": "sess_5e8b3261-dbec-4c65-8818-df345298540a",
+        "timestamp": 1792863808198
+      }
+    ],
+    "3. Phase 1 continued — Property Tests for Data Model": [
+      {
+        "executionId": "4a5dd2d4-c350-45d7-a373-459df838b232",
+        "chatSessionId": "sess_5e8b3261-dbec-4c65-8818-df345298540a",
+        "timestamp": 1792864530078
+      }
+    ],
+    "4. Phase 2 — Individual Character Journey View and Party Pages": [
+      {
+        "executionId": "4a5dd2d4-c350-45d7-a373-459df838b232",
+        "chatSessionId": "sess_5e8b3261-dbec-4c65-8818-df345298540a",
+        "timestamp": 1792865072216
+      }
+    ],
+    "6. Phase 3 — World Atlas Route Overlay": [
+      {
+        "executionId": "4a5dd2d4-c350-45d7-a373-459df838b232",
+        "chatSessionId": "sess_5e8b3261-dbec-4c65-8818-df345298540a",
+        "timestamp": 1792870219243
+      }
+    ],
+    "8. Phase 4 — Session Integration, Backstory Workflow, and Journey Editor": [
+      {
+        "executionId": "4a5dd2d4-c350-45d7-a373-459df838b232",
+        "chatSessionId": "sess_5e8b3261-dbec-4c65-8818-df345298540a",
+        "timestamp": 1792871190183
+      }
+    ],
+    "10. Phase 5 — Playback and Advanced Views": [
+      {
+        "executionId": "4a5dd2d4-c350-45d7-a373-459df838b232",
+        "chatSessionId": "sess_5e8b3261-dbec-4c65-8818-df345298540a",
+        "timestamp": 1792871861614
+      }
+    ]
+  }
+}

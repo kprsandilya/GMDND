@@ -6,6 +6,7 @@ import { useRepos } from "@/app/appContext";
 import { qk, useAction, useCampaignId, useEntities } from "@/app/queries";
 import { routeForEntity } from "@/app/routes";
 import { EntityWorkspace } from "@/components/EntityWorkspace";
+import { VisitHistorySection } from "./VisitHistorySection";
 import { Badge, Button } from "@/components/ui";
 import { GEOGRAPHIC_KINDS, KIND_LABELS, type Entity } from "@/domain/types";
 import { setPartyLocation } from "@/domain/workflows/campaignWorkflow";
@@ -36,6 +37,11 @@ export function LocationsPage() {
             value: "map",
             label: "Map refs",
             render: (e) => <MapRefs entity={e} onOpen={(mapId) => navigate(`/atlas/${mapId}?entity=${e.id}`)} />,
+          },
+          {
+            value: "visits",
+            label: "Visit History",
+            render: (e) => <VisitHistorySection entity={e} />,
           },
         ],
       }}
