@@ -68,6 +68,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
           setCampaignId((demo ?? campaigns[0]!).id);
         }
         await repos.settings.set("first_run_complete", true);
+        const sessionId = useAppStore.getState().activeSessionId;
+        const activeCampaign = useAppStore.getState().campaignId;
+        if (sessionId) {
+          const session = await repos.entities.find(sessionId);
+          if (!session || session.kind !== "session" || (session.campaign_id && session.campaign_id !== activeCampaign)) {
+            useAppStore.getState().setActiveSessionId(null);
+          }
+        }
         if (settings.autoBackupOnStart && migration.to > 0) {
           setBoot({ status: "loading", step: "Creating startup snapshot" });
           await platform.autoBackup(settings.autoBackupKeep).catch((error) => console.warn("auto backup failed", error));

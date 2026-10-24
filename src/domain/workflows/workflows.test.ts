@@ -150,6 +150,23 @@ describe("demo campaign workflow", () => {
     expect(runs[0]!.log.length).toBeGreaterThan(5);
   });
 
+  it("starts a run even when the stored session or map ids are gone", async () => {
+    const { repos } = await testRepos();
+    const ids = await seedDemoCampaign(repos);
+    const ambush = (await repos.entities.list({ campaign_id: ids.campaign, kinds: ["encounter"] })).find((e) => e.name === "Guard Post Ambush")!;
+    const { run } = await activateEncounter(repos, {
+      campaign_id: ids.campaign,
+      encounter_id: ambush.id,
+      session_id: "missing-session",
+      room_id: "missing-room",
+      floor_id: "missing-floor",
+    });
+    expect(run.session_id).toBeNull();
+    expect(run.room_id).toBeNull();
+    expect(run.floor_id).toBeNull();
+    expect(run.status).toBe("prepared");
+  });
+
   it("creates campaigns, advances time, moves the party and promotes notes", async () => {
     const { repos } = await testRepos();
     const { campaign, world } = await createCampaign(repos, { name: "New Campaign" });

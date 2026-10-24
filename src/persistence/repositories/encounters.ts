@@ -10,7 +10,7 @@ import type {
   RunStatus,
 } from "@/domain/types";
 import type { Row, SqlDriver, Statement } from "../driver";
-import { bool, buildSet, int, json, newId, now, num, parseJson, requireRow, str, text } from "./common";
+import { bool, buildSet, existingId, int, json, newId, now, num, parseJson, requireRow, str, text } from "./common";
 import { EntityRepository } from "./entities";
 
 export function mapParticipant(row: Row): EncounterParticipant {
@@ -150,8 +150,14 @@ export class EncounterRepository {
    * creature records, so running the encounter never changes the reusable definition.
    */
   async startRun(options: StartRunOptions): Promise<{ run: EncounterRun; combatants: Combatant[] }> {
-    const template = options.encounter_id ? await this.entities.get(options.encounter_id) : null;
-    const participants = options.encounter_id ? await this.participants(options.encounter_id) : [];
+    const campaignId = await existingId(this.db, "entities", options.campaign_id);
+    if (!campaignId) throw new Error("No campaign is selected, or that campaign no longer exists.");
+    const encounterId = await existingId(this.db, "entities", options.encounter_id);
+    const sessionId = await existingId(this.db, "entities", options.session_id);
+    const roomId = await existingId(this.db, "rooms", options.room_id);
+    const floorId = await existingId(this.db, "dungeon_floors", options.floor_id);
+    const template = encounterId ? await this.entities.get(encounterId) : null;
+    const participants = encounterId ? await this.participants(encounterId) : [];
     const definitions = await this.entities.getMany(participants.map((p) => p.entity_id).filter((id): id is string => !!id));
     const byId = new Map(definitions.map((d) => [d.id, d]));
     const runId = newId();
@@ -160,7 +166,7 @@ export class EncounterRepository {
       {
         sql: `INSERT INTO encounter_runs (id, campaign_id, encounter_id, session_id, room_id, floor_id, name, status, round, turn_index, log, outcomes, created_at, updated_at)
               VALUES (?, ?, ?, ?, ?, ?, ?, 'prepared', 0, 0, '[]', '{}', ?, ?)`,
-        params: [runId, options.campaign_id, options.encounter_id, options.session_id ?? null, options.room_id ?? null, options.floor_id ?? null, options.name ?? template?.name ?? "Encounter", ts, ts],
+        params: [runId, campaignId, encounterId, sessionId, roomId, floorId, options.name ?? template?.name ?? "Encounter", ts, ts],
       },
     ];
 
@@ -180,7 +186,7 @@ export class EncounterRepository {
         const hp = token?.hp ?? maxHp;
         statements.push(
           this.combatantInsert(runId, {
-            entity_id: participant.entity_id,
+            entity_id: participant.entity_id && byId.has(participant.entity_id) ? participant.entity_id : null,
             token_id: token?.id ?? null,
             name: token?.name && participant.count === 1 ? token.name : name,
             side: participant.side,

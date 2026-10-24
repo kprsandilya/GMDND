@@ -1,4 +1,4 @@
-import type { Row } from "../driver";
+import type { Row, SqlDriver } from "../driver";
 
 export const newId = (): string => crypto.randomUUID();
 export const now = (): string => new Date().toISOString();
@@ -22,6 +22,15 @@ export class NotFoundError extends Error {
     super(`${what} not found: ${id}`);
     this.name = "NotFoundError";
   }
+}
+
+const ID_TABLES = new Set(["entities", "rooms", "dungeon_floors", "tokens", "encounter_runs"]);
+
+/** Returns the id if it exists; empty strings and missing rows become null so optional FKs do not fail. */
+export async function existingId(db: SqlDriver, table: string, id: string | null | undefined): Promise<string | null> {
+  if (!id || !ID_TABLES.has(table)) return null;
+  const rows = await db.select(`SELECT id FROM ${table} WHERE id = ? LIMIT 1`, [id]);
+  return rows[0] ? String(rows[0].id) : null;
 }
 
 export function requireRow<T extends Row>(rows: T[], what: string, id: string): T {

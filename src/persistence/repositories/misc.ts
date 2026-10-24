@@ -165,7 +165,7 @@ export class CampaignLogRepository {
   }
 
   async add(campaignId: string, kind: string, message: string, refs: Record<string, string> = {}, sessionId: string | null = null): Promise<void> {
-    const s = this.statement(campaignId, kind, message, refs, sessionId);
+    const s = this.statement(campaignId, kind, message, refs, sessionId || null);
     await this.db.execute(s.sql, s.params);
   }
 

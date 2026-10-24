@@ -59,7 +59,7 @@ export const useAppStore = create<AppState>()(
   persist(
     (set) => ({
       campaignId: null,
-      setCampaignId: (campaignId) => set({ campaignId, selectedTokenId: null }),
+      setCampaignId: (campaignId) => set({ campaignId, selectedTokenId: null, activeSessionId: null }),
       settings: DEFAULT_SETTINGS,
       updateSettings: (patch) => set((s) => ({ settings: { ...s.settings, ...patch } })),
       activeSessionId: null,

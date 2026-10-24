@@ -20,6 +20,8 @@ export interface ActivateOptions {
  */
 export async function activateEncounter(repos: Repositories, options: ActivateOptions): Promise<{ run: EncounterRun; combatants: Combatant[] }> {
   const party = options.includeParty === false ? [] : await repos.entities.list({ campaign_id: options.campaign_id, kinds: ["pc"] });
+  const session = options.session_id ? await repos.entities.find(options.session_id) : null;
+  const sessionId = session?.kind === "session" ? session.id : null;
   let tokens: { id: string; entity_id: string | null; name: string; hp: number | null; max_hp: number | null }[] = [];
   if (options.floor_id) {
     tokens = await repos.dungeons.tokens(options.floor_id);
@@ -73,12 +75,12 @@ export async function activateEncounter(repos: Repositories, options: ActivateOp
     encounter_id: options.encounter_id,
     room_id: options.room_id ?? null,
     floor_id: options.floor_id ?? null,
-    session_id: options.session_id ?? null,
+    session_id: sessionId,
     party,
     tokens,
   });
   const template = await repos.entities.get(options.encounter_id);
-  await repos.campaignLog.add(options.campaign_id, "encounter", `Encounter prepared: ${template.name}`, { run_id: result.run.id, encounter_id: template.id, room_id: options.room_id ?? "" }, options.session_id ?? null);
+  await repos.campaignLog.add(options.campaign_id, "encounter", `Encounter prepared: ${template.name}`, { run_id: result.run.id, encounter_id: template.id, room_id: options.room_id ?? "" }, sessionId);
   return result;
 }
 
