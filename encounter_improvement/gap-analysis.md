@@ -18,6 +18,7 @@
 
 | Need | Inspiration | Our gap |
 | --- | --- | --- |
+| **Instance sheets** (each copy is editable) | DFC numbered monsters; tracker rows | Spawn copies HP/AC only. Actions still live on the shared creature. Editing the entity would change every Fen Cultist. |
 | Open the **stat block mid-fight** | DFC, MitzNSimz `S`, Mimir play mode | Combatant row is name + HP only. `entity_id` is unused in the UI. |
 | **Press an action** (to-hit / damage in the log) | DFC “actions off the statblock” | `fields.actions` is a blob; no parse, no buttons. |
 | **Legendary actions** between turns | DFC combat cards | Resource copied to `combatant.resources.legendary`, never shown. |
@@ -38,4 +39,5 @@
 - Marker draw: `src/features/dungeons/MapCanvas.tsx` (`MARKER_COLOR.treasure`, `$`)
 - Room inspector already lists `useInventory({ owner_type: "room" })`
 - Creature fields: `src/domain/schemas.ts` `creatureFieldsSchema`
-- Combatant type: `src/domain/types.ts` — has `entity_id`, `resources`, `notes`
+- Combatant type: `src/domain/types.ts` — has `entity_id`, `resources`, `notes`; **no `sheet` snapshot yet**
+- Spawn copy: `src/persistence/repositories/encounters.ts` `startRun`
