@@ -5,7 +5,7 @@ import { EntityRepository } from "./repositories/entities";
 import { TimelineRepository } from "./repositories/misc";
 import { JourneyRepository } from "./repositories/journeys";
 import type { Entity } from "@/domain/types";
-import type { JourneyInput, SegmentInput, Journey } from "@/domain/journeyTypes";
+import type { JourneyInput } from "@/domain/journeyTypes";
 
 /**
  * Integration tests for the data contracts consumed by SessionTravelTab,
@@ -16,7 +16,6 @@ import type { JourneyInput, SegmentInput, Journey } from "@/domain/journeyTypes"
 
 let driver: NodeSqlDriver;
 let entities: EntityRepository;
-let timeline: TimelineRepository;
 let journeys: JourneyRepository;
 let campaign: Entity;
 
@@ -24,7 +23,7 @@ beforeEach(async () => {
   driver = new NodeSqlDriver();
   await migrate(driver);
   entities = new EntityRepository(driver);
-  timeline = new TimelineRepository(driver);
+  new TimelineRepository(driver); // instantiated for migration side-effects
   journeys = new JourneyRepository(driver);
 
   campaign = await entities.create({ kind: "campaign", name: "Test Campaign" });

@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { MapPin, Route, Users, ChevronRight } from "lucide-react";
+import { Route, Users, ChevronRight } from "lucide-react";
 import { Link } from "react-router";
 import { useRepos } from "@/app/appContext";
 import { routeForEntity } from "@/app/routes";

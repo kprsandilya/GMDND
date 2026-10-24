@@ -391,7 +391,7 @@ function MapView({ mapId, active, onDeleted }: { mapId: string; active: boolean;
     [journeySegments.data, selectedSegmentId],
   );
 
-  const handlePlaybackVisibleChange = useCallback((visible: EnrichedSegment[], current: EnrichedSegment | null) => {
+  const handlePlaybackVisibleChange = useCallback((visible: EnrichedSegment[], _current: EnrichedSegment | null) => {
     setPlaybackVisibleSegs(visible);
   }, []);
 
@@ -413,7 +413,6 @@ function MapView({ mapId, active, onDeleted }: { mapId: string; active: boolean;
   useEffect(() => {
     if (!win || status !== "ready") return;
     const doc = win.document;
-    const viewbox = doc.getElementById("viewbox");
     const overlay = doc.getElementById("dm-workbench-overlay") as SVGGElement | null;
     if (!overlay) return;
 
@@ -683,16 +682,16 @@ function MapView({ mapId, active, onDeleted }: { mapId: string; active: boolean;
                   noResults={!!(journeySegments.data && journeySegments.data.length === 0)}
                 />
               </div>
-              <RouteLegend
-                segments={journeySegments.data ?? []}
-                unmappedCount={routeResultRef.current.unmappedSegments.length}
-                className="absolute bottom-3 left-3 z-10"
-              />
-              <JourneyPlayback
-                filteredSegments={journeySegments.data ?? []}
-                onVisibleChange={handlePlaybackVisibleChange}
-                className="absolute left-3 bottom-14 z-10 w-80"
-              />
+              <div className="absolute bottom-3 left-3 z-10 flex flex-col gap-2 max-w-80">
+                <JourneyPlayback
+                  filteredSegments={journeySegments.data ?? []}
+                  onVisibleChange={handlePlaybackVisibleChange}
+                />
+                <RouteLegend
+                  segments={journeySegments.data ?? []}
+                  unmappedCount={routeResultRef.current.unmappedSegments.length}
+                />
+              </div>
               <RouteComparison
                 segments={journeySegments.data ?? []}
                 selectedCharacterIds={routeFilters.characterIds ?? []}

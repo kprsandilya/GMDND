@@ -1,6 +1,6 @@
 /** Journey domain types shared by persistence, domain logic and the UI. Row shapes mirror the SQLite schema. */
 
-import type { Entity, EntityKind, ItemInstanceWithDefinition, LinkedEntity, TimelineEvent } from "./types";
+import type { ItemInstanceWithDefinition, LinkedEntity } from "./types";
 
 // ── Journey categories ──
 
@@ -257,12 +257,28 @@ export type SegmentInput = Omit<TravelSegment, "id" | "created_at" | "updated_at
   sort_order?: number;
 };
 
-export type ParticipantInput = Omit<SegmentParticipant, "id" | "created_at"> & {
+export type ParticipantInput = {
+  segment_id: string;
+  entity_id: string;
   id?: string;
+  role?: string;
+  notes?: string;
 };
 
-export type MembershipInput = Omit<PartyMembership, "id" | "created_at"> & {
+export type MembershipInput = {
+  party_id: string;
+  entity_id: string;
   id?: string;
+  role?: string;
+  joined_session_id?: string | null;
+  left_session_id?: string | null;
+  joined_year?: number | null;
+  joined_month?: number | null;
+  joined_day?: number | null;
+  left_year?: number | null;
+  left_month?: number | null;
+  left_day?: number | null;
+  notes?: string;
 };
 
 // ── Patch types (for updating existing records) ──

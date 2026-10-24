@@ -5,7 +5,7 @@ import { useCampaignId } from "@/app/queries";
 import { routeForEntity } from "@/app/routes";
 import { MarkdownView } from "@/components/Markdown";
 import { EmptyState } from "@/components/ui";
-import type { DmReferenceData, ExtendedTimelineEvent } from "@/domain/journeyTypes";
+import type { ExtendedTimelineEvent } from "@/domain/journeyTypes";
 import { TIMELINE_EVENT_CATEGORY_LABELS } from "@/domain/journeyTypes";
 import type { Entity, LinkedEntity } from "@/domain/types";
 

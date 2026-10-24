@@ -86,7 +86,7 @@ interface ComparisonData {
 function computeComparison(
   segments: EnrichedSegment[],
   selectedCharacterIds: string[],
-  characterNames: Record<string, string>,
+  _characterNames: Record<string, string>,
 ): ComparisonData {
   const selectedSet = new Set(selectedCharacterIds);
   const colorMap = buildCharacterColorMap(selectedCharacterIds);
@@ -282,7 +282,7 @@ export function RouteComparison({ segments, selectedCharacterIds, characterNames
                   <div className="mt-0.5 flex gap-1">
                     {selectedCharacterIds
                       .filter((id) => loc.visitors.has(id))
-                      .map((id, i) => (
+                      .map((id, _i) => (
                         <span
                           key={id}
                           className="inline-block h-2 w-2 rounded-full"

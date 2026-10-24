@@ -36,7 +36,7 @@ describe("Timeline Event Participants (Task 1.9)", () => {
       year: null,
       month: null,
       day: null,
-      kind: "general",
+      kind: "general" as "history",
       secret: false,
     });
   }
@@ -146,7 +146,7 @@ describe("Timeline Event Participants (Task 1.9)", () => {
 
   it("returns events where the character is the primary entity", async () => {
     const char = await createCharacter("Jules");
-    const event = await createTimelineEvent("Birth", char.id);
+    await createTimelineEvent("Birth", char.id);
 
     const events = await journeys.eventsForCharacter(char.id);
     expect(events).toHaveLength(1);
@@ -190,7 +190,7 @@ describe("Timeline Event Participants (Task 1.9)", () => {
     const char = await createCharacter("Omar");
 
     // Create events in deliberate disorder
-    const e1 = await timeline.create({
+    await timeline.create({
       campaign_id: campaignId,
       entity_id: char.id,
       title: "Event Year 1000",
@@ -198,7 +198,7 @@ describe("Timeline Event Participants (Task 1.9)", () => {
       year: 1000,
       month: 6,
       day: 15,
-      kind: "general",
+      kind: "general" as "history" as "history",
       secret: false,
     });
 
@@ -210,7 +210,7 @@ describe("Timeline Event Participants (Task 1.9)", () => {
       year: 500,
       month: 1,
       day: 1,
-      kind: "general",
+      kind: "general" as "history" as "history",
       secret: false,
     });
 
@@ -222,10 +222,12 @@ describe("Timeline Event Participants (Task 1.9)", () => {
       year: null,
       month: null,
       day: null,
-      kind: "general",
+      kind: "general" as "history" as "history",
       secret: false,
     });
 
+    void e2;
+    void e3;
     const events = await journeys.eventsForCharacter(char.id);
     expect(events).toHaveLength(3);
     // Year 500 before Year 1000, undated last

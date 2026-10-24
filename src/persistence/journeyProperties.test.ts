@@ -386,6 +386,7 @@ function nullableInt(min: number, max: number) {
 }
 
 /** Descriptor for a single timeline event to insert. */
+/** Description for a timeline event in property tests. */
 interface EventDesc {
   title: string;
   manual_order: number;
@@ -395,7 +396,7 @@ interface EventDesc {
 }
 
 /** Generate a list of 2–8 event descriptors with varying sort-relevant fields. */
-const eventDescsArb = fc
+const eventDescsArb: fc.Arbitrary<EventDesc[]> = fc
   .array(
     fc.record({
       manual_order: fc.integer({ min: -5, max: 5 }),
@@ -460,7 +461,7 @@ describe("timeline event sorting determinism (Property 5)", () => {
             year: desc.year,
             month: desc.month,
             day: desc.day,
-            kind: "general",
+            kind: "general" as "history",
             secret: false,
             manual_order: desc.manual_order,
           });
@@ -496,7 +497,7 @@ describe("timeline event sorting determinism (Property 5)", () => {
             year: desc.year,
             month: desc.month,
             day: desc.day,
-            kind: "general",
+            kind: "general" as "history",
             secret: false,
             manual_order: desc.manual_order,
           });
@@ -541,7 +542,7 @@ describe("timeline event sorting determinism (Property 5)", () => {
             year: null,
             month: null,
             day: null,
-            kind: "general",
+            kind: "general" as "history",
             secret: false,
             manual_order: manualOrder,
           });
@@ -555,7 +556,7 @@ describe("timeline event sorting determinism (Property 5)", () => {
             year,
             month: 1,
             day: 1,
-            kind: "general",
+            kind: "general" as "history",
             secret: false,
             manual_order: manualOrder,
           });
@@ -591,7 +592,7 @@ describe("timeline event sorting determinism (Property 5)", () => {
             year: 1,
             month: 1,
             day: 1,
-            kind: "general",
+            kind: "general" as "history",
             secret: false,
             manual_order: orderGap,
           });
@@ -605,7 +606,7 @@ describe("timeline event sorting determinism (Property 5)", () => {
             year: year + 1000,
             month: 12,
             day: 28,
-            kind: "general",
+            kind: "general" as "history",
             secret: false,
             manual_order: 0,
           });
@@ -2020,6 +2021,7 @@ describe("entity deletion cascades correctly through journey system (Property 12
           const campaign = await repos.entities.create({ kind: "campaign", name: "SetNull Test" });
           // Use a PC as both a participant and an origin/destination (e.g. a character's home)
           const charEntity = await repos.entities.create({ kind: "pc", name: "Nomad", campaign_id: campaign.id });
+          void charEntity;
           const otherLoc = await repos.entities.create({ kind: "settlement", name: "Town", campaign_id: campaign.id });
 
           const journey = await repos.journeys.createJourney({

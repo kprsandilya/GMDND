@@ -36,7 +36,6 @@ import type {
   JourneyInput,
   RouteCertainty,
   SegmentCertainty,
-  SegmentParticipant,
   TravelSegment,
   Waypoint,
 } from "@/domain/journeyTypes";
@@ -283,7 +282,7 @@ export function JourneyEditor({
 function JourneyFormFields({
   form,
   patch,
-  campaignId,
+  campaignId: _campaignId,
 }: {
   form: JourneyFormState;
   patch: (delta: Partial<JourneyFormState>) => void;

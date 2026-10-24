@@ -327,9 +327,9 @@ describe("JourneyRepository — Journey CRUD", () => {
       const jr = new JourneyRepository(driver);
       const campaign = await setupCampaign(repos);
 
-      const j1 = await jr.createJourney(baseInput(campaign.id, { name: "Journey B", sort_order: 1, start_year: 1500 }));
-      const j2 = await jr.createJourney(baseInput(campaign.id, { name: "Journey A", sort_order: 0, start_year: 1490 }));
-      const j3 = await jr.createJourney(baseInput(campaign.id, { name: "Journey C", sort_order: 0, start_year: null }));
+      void await await jr.createJourney(baseInput(campaign.id, { name: "Journey B", sort_order: 1, start_year: 1500 }));
+      void await await jr.createJourney(baseInput(campaign.id, { name: "Journey A", sort_order: 0, start_year: 1490 }));
+      void await await jr.createJourney(baseInput(campaign.id, { name: "Journey C", sort_order: 0, start_year: null }));
 
       const list = await jr.listJourneys(campaign.id);
 

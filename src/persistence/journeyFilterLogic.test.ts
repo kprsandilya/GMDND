@@ -7,10 +7,10 @@
  *
  * Requirements: 9.4, 11.7
  */
-import { describe, expect, it, beforeEach } from "vitest";
+import { describe, expect, it } from "vitest";
 import { testRepos } from "./testUtils";
 import type { Repositories } from "./repositories";
-import type { RouteFilters, JourneyCategory } from "@/domain/journeyTypes";
+import type { JourneyCategory } from "@/domain/journeyTypes";
 
 // ── Shared scenario builder ──
 
@@ -86,13 +86,13 @@ async function buildFilterScenario(repos: Repositories): Promise<FilterScenario>
     originLoc: number; // index into locations[]
     destLoc: number;
   }[] = [
-    { name: "J1", category: "backstory",   partyId: partyA.id,  sessionId: sessionX.id, chars: [charAlpha.id],                originLoc: 0,  destLoc: 1 },
-    { name: "J2", category: "campaign",    partyId: partyA.id,  sessionId: sessionY.id, chars: [charAlpha.id, charBeta.id],    originLoc: 2,  destLoc: 3 },
-    { name: "J3", category: "individual",  partyId: partyB.id,  sessionId: sessionX.id, chars: [charBeta.id],                 originLoc: 4,  destLoc: 5 },
-    { name: "J4", category: "party",       partyId: partyB.id,  sessionId: sessionY.id, chars: [charGamma.id],                originLoc: 6,  destLoc: 7 },
-    { name: "J5", category: "backstory",   partyId: null,       sessionId: null,        chars: [charAlpha.id, charGamma.id],   originLoc: 8,  destLoc: 9 },
-    { name: "J6", category: "campaign",    partyId: partyA.id,  sessionId: null,        chars: [charBeta.id, charGamma.id],    originLoc: 10, destLoc: 11 },
-  ];
+      { name: "J1", category: "backstory", partyId: partyA.id, sessionId: sessionX.id, chars: [charAlpha.id], originLoc: 0, destLoc: 1 },
+      { name: "J2", category: "campaign", partyId: partyA.id, sessionId: sessionY.id, chars: [charAlpha.id, charBeta.id], originLoc: 2, destLoc: 3 },
+      { name: "J3", category: "individual", partyId: partyB.id, sessionId: sessionX.id, chars: [charBeta.id], originLoc: 4, destLoc: 5 },
+      { name: "J4", category: "party", partyId: partyB.id, sessionId: sessionY.id, chars: [charGamma.id], originLoc: 6, destLoc: 7 },
+      { name: "J5", category: "backstory", partyId: null, sessionId: null, chars: [charAlpha.id, charGamma.id], originLoc: 8, destLoc: 9 },
+      { name: "J6", category: "campaign", partyId: partyA.id, sessionId: null, chars: [charBeta.id, charGamma.id], originLoc: 10, destLoc: 11 },
+    ];
 
   const journeyIds: string[] = [];
 
@@ -467,11 +467,11 @@ describe("enrichedSegmentsForMap filter logic", () => {
         return j.id;
       };
 
-      const jEarly   = await createDatedJourney("J-early",   "backstory",   100, 200, [0, 1]);
-      const jMid     = await createDatedJourney("J-mid",     "campaign",    300, 400, [2, 3]);
-      const jLate    = await createDatedJourney("J-late",    "individual",  500, 600, [4, 5]);
-      const jOpen    = await createDatedJourney("J-open",    "party",       450, null, [6, 7]);
-      const jUndated = await createDatedJourney("J-undated", "backstory",   null, null, [8, 9]);
+      const jEarly = await createDatedJourney("J-early", "backstory", 100, 200, [0, 1]);
+      const jMid = await createDatedJourney("J-mid", "campaign", 300, 400, [2, 3]);
+      const jLate = await createDatedJourney("J-late", "individual", 500, 600, [4, 5]);
+      const jOpen = await createDatedJourney("J-open", "party", 450, null, [6, 7]);
+      const jUndated = await createDatedJourney("J-undated", "backstory", null, null, [8, 9]);
 
       return { campaignId: campaign.id, mapId: map.id, jEarly, jMid, jLate, jOpen, jUndated };
     }

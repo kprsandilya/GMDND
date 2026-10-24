@@ -486,17 +486,26 @@ export class JourneyRepository {
     await this.db.batch(statements);
   }
 
+  /** Reorder journeys within a campaign by setting sequential sort_order values. */
+  async reorderJourneys(campaignId: string, orderedIds: string[]): Promise<void> {
+    const statements = orderedIds.map((id, index) => ({
+      sql: "UPDATE journeys SET sort_order = ?, updated_at = ? WHERE id = ? AND campaign_id = ?",
+      params: [index, now(), id, campaignId] as (string | number | boolean | null)[],
+    }));
+    await this.db.batch(statements);
+  }
+
   // ── Segment Participants ──
 
   async addParticipant(input: ParticipantInput): Promise<SegmentParticipant> {
-    // Validate entity exists and kind is pc or npc
+    // Validate entity exists and kind is a character-like entity
     const entityRows = await this.db.select("SELECT kind FROM entities WHERE id = ?", [input.entity_id]);
     if (entityRows.length === 0) {
       throw new ValidationError(`Entity not found: ${input.entity_id}`);
     }
     const kind = String(entityRows[0].kind);
-    if (kind !== "pc" && kind !== "npc") {
-      throw new ValidationError(`Entity must be of kind pc or npc, got: ${kind}`);
+    if (kind !== "pc" && kind !== "npc" && kind !== "creature") {
+      throw new ValidationError(`Entity must be of kind pc, npc, or creature, got: ${kind}`);
     }
 
     // Validate segment exists
@@ -784,93 +793,6 @@ export class JourneyRepository {
   }
 
   // ── Enriched Queries ──
-
-  /** Internal helper: enriches segment rows with participants, journey data, and coordinates. */
-  private async enrichSegments(segmentRows: Row[], mapId?: string): Promise<EnrichedSegment[]> {
-    if (segmentRows.length === 0) return [];
-
-    const results: EnrichedSegment[] = [];
-
-    for (const row of segmentRows) {
-      const segment = mapSegment(row);
-      const journey = mapJourney(row);
-
-      // Fetch participants with entity names
-      const participantRows = await this.db.select(
-        `SELECT sp.*, e.name AS entity_name
-         FROM segment_participants sp
-         JOIN entities e ON e.id = sp.entity_id
-         WHERE sp.segment_id = ?
-         ORDER BY sp.created_at`,
-        [segment.id],
-      );
-      const participants = participantRows.map((pr) => ({
-        ...mapParticipant(pr),
-        entity_name: text(pr.entity_name),
-      }));
-
-      // Look up origin/destination entity names
-      const originName = segment.origin_entity_id
-        ? str((await this.db.select("SELECT name FROM entities WHERE id = ?", [segment.origin_entity_id]))[0]?.name)
-        : null;
-      const destinationName = segment.destination_entity_id
-        ? str((await this.db.select("SELECT name FROM entities WHERE id = ?", [segment.destination_entity_id]))[0]?.name)
-        : null;
-
-      // Coordinate lookups via map_feature_links (only if mapId is provided)
-      let originCoords: { x: number; y: number } | null = null;
-      let destinationCoords: { x: number; y: number } | null = null;
-      const waypointCoords: ({ x: number; y: number } | null)[] = [];
-
-      if (mapId) {
-        if (segment.origin_entity_id) {
-          originCoords = await this.lookupCoords(segment.origin_entity_id, mapId);
-        }
-        if (segment.destination_entity_id) {
-          destinationCoords = await this.lookupCoords(segment.destination_entity_id, mapId);
-        }
-        for (const wp of segment.waypoints) {
-          if (wp.x != null && wp.y != null) {
-            waypointCoords.push({ x: wp.x, y: wp.y });
-          } else if (wp.entity_id) {
-            waypointCoords.push(await this.lookupCoords(wp.entity_id, mapId));
-          } else {
-            waypointCoords.push(null);
-          }
-        }
-      } else {
-        // Without mapId, look up coordinates from any map for the entity
-        if (segment.origin_entity_id) {
-          originCoords = await this.lookupCoordsAnyMap(segment.origin_entity_id);
-        }
-        if (segment.destination_entity_id) {
-          destinationCoords = await this.lookupCoordsAnyMap(segment.destination_entity_id);
-        }
-        for (const wp of segment.waypoints) {
-          if (wp.x != null && wp.y != null) {
-            waypointCoords.push({ x: wp.x, y: wp.y });
-          } else if (wp.entity_id) {
-            waypointCoords.push(await this.lookupCoordsAnyMap(wp.entity_id));
-          } else {
-            waypointCoords.push(null);
-          }
-        }
-      }
-
-      results.push({
-        ...segment,
-        journey,
-        participants,
-        origin_name: originName,
-        destination_name: destinationName,
-        origin_coords: originCoords,
-        destination_coords: destinationCoords,
-        waypoint_coords: waypointCoords,
-      });
-    }
-
-    return results;
-  }
 
   /** Look up (x, y) for an entity on a specific map. */
   private async lookupCoords(entityId: string, mapId: string): Promise<{ x: number; y: number } | null> {
@@ -1237,7 +1159,7 @@ export class JourneyRepository {
     return result;
   }
 
-  async dmReferenceData(entityId: string, campaignId: string): Promise<DmReferenceData> {
+  async dmReferenceData(entityId: string, _campaignId: string): Promise<DmReferenceData> {
     // 1. Character summary and known secrets from entity fields
     const entityRows = await this.db.select("SELECT dm_notes_md, secret_md FROM entities WHERE id = ?", [entityId]);
     const entityRow = entityRows[0];

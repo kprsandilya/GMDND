@@ -5,9 +5,9 @@
  * The RouteLegend React component is tested indirectly via its logic (category collection).
  */
 import { describe, expect, it, vi, beforeEach } from "vitest";
-import type { EnrichedSegment, Journey, JourneyCategory, SegmentParticipant } from "@/domain/journeyTypes";
+import type { EnrichedSegment, Journey, JourneyCategory } from "@/domain/journeyTypes";
 import { JOURNEY_CATEGORIES } from "@/domain/journeyTypes";
-import { ROUTE_STYLES, renderRouteOverlay, clearRouteOverlay, type RouteOverlayResult } from "./RouteOverlay";
+import { ROUTE_STYLES, renderRouteOverlay, clearRouteOverlay } from "./RouteOverlay";
 
 // ── Minimal SVG DOM mock ──
 
@@ -175,11 +175,11 @@ describe("ROUTE_STYLES", () => {
 
 describe("renderRouteOverlay", () => {
   let svgGroup: MockElement;
-  let onClick: ReturnType<typeof vi.fn>;
+  let onClick: (segmentId: string) => void;
 
   beforeEach(() => {
     svgGroup = createMockSvgGroup();
-    onClick = vi.fn();
+    onClick = vi.fn() as unknown as (segmentId: string) => void;
   });
 
   it("renders nothing and returns empty arrays for an empty segments list", () => {

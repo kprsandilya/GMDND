@@ -93,6 +93,15 @@ export function JourneyTimelineTab({ entity }: { entity: Entity }) {
   const repos = useRepos();
   const campaignId = useCampaignId();
   const [editorOpen, setEditorOpen] = useState(false);
+  const [editJourneyId, setEditJourneyId] = useState<string | undefined>(undefined);
+
+  // Fetch all journeys for this campaign (so newly created ones are visible)
+  const campaignJourneys = useQuery({
+    queryKey: ["journeys", "list", campaignId],
+    queryFn: () => repos.journeys.listJourneys(campaignId!),
+    enabled: !!campaignId,
+  });
+  const allJourneys = campaignJourneys.data ?? [];
 
   // Fetch travel history (enriched segments for this character)
   const travelHistory = useQuery({
@@ -122,15 +131,16 @@ export function JourneyTimelineTab({ entity }: { entity: Entity }) {
     return <div className="flex items-center justify-center p-8 text-[12px] text-ink-faint">Loading journey data…</div>;
   }
 
-  if (isEmpty) {
+  // Fully empty: no travel, no events, no campaign journeys at all
+  if (isEmpty && allJourneys.length === 0) {
     return (
       <>
         <EmptyState
           title="No journey history recorded"
           body="This character has no travel segments or timeline events yet."
-          action={campaignId ? <Button variant="primary" onClick={() => setEditorOpen(true)}><Plus size={13} /> New Journey</Button> : undefined}
+          action={campaignId ? <Button variant="primary" onClick={() => { setEditJourneyId(undefined); setEditorOpen(true); }}><Plus size={13} /> New Journey</Button> : undefined}
         />
-        {campaignId && <JourneyEditor open={editorOpen} onOpenChange={setEditorOpen} campaignId={campaignId} />}
+        {campaignId && <JourneyEditor open={editorOpen} onOpenChange={setEditorOpen} journeyId={editJourneyId} campaignId={campaignId} />}
       </>
     );
   }
