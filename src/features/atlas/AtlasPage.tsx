@@ -14,8 +14,8 @@ import { Badge, Button, Checkbox, ConfirmDialog, Dialog, EmptyState, Field, Inpu
 import { GEOGRAPHIC_KINDS, type Entity, type EntityKind, type MapAnnotation, type MapFeatureLink, type WorldMap } from "@/domain/types";
 import { cn, errorMessage } from "@/lib/utils";
 import { DEMO_MAP_SEED } from "@/seed/demoCampaign";
-import { fmgSrc, forgetMapText, recalledMapText, rememberMapText } from "./atlasCache";
-import { dismissUpdateDialog, exportMapData, featureAt, iframeClientToMap, installExternalLinkHook, listFeatures, loadMapData, renderOverlay, suppressFollowupMapLink, waitForMap, waitForServices, zoomScaleFor, zoomTo, type FmgFeature, type FmgWindow } from "./fmgBridge";
+import { asMapFileText, fmgSrc, forgetMapText, looksLikeMapFile, recalledMapText, rememberMapText } from "./atlasCache";
+import { dismissUpdateDialog, exportMapData, featureAt, iframeClientToMap, installExternalLinkHook, installMapLinkFetch, isReady, listFeatures, loadMapData, renderOverlay, waitForMap, waitForServices, zoomScaleFor, zoomTo, type FmgFeature, type FmgWindow } from "./fmgBridge";
 
 const ANNOTATION_COLORS: Record<MapAnnotation["kind"], string> = { poi: "#d9a441", note: "#8fb3c9", secret: "#b58cf0", quest: "#e0893f", encounter: "#c4524a", danger: "#ff5a5a" };
 const LINK_COLOR = "#f0c674";
@@ -186,17 +186,21 @@ function MapView({ mapId, active, onDeleted }: { mapId: string; active: boolean;
         setStatus("loading");
         setStatusText("Restoring saved world…");
         const cached = recalledMapText(map.data!.map_asset);
-        const text = cached ?? (await platform.readTextAsset(map.data!.map_asset));
+        const raw = cached ?? (await platform.readTextAsset(map.data!.map_asset));
         if (cancelled) return;
-        rememberMapText(map.data!.map_asset, text);
-        pendingMapTextRef.current = text;
-        setFrameSrc(fmgSrc({ mapId, saved: true }));
-      } else {
-        pendingMapTextRef.current = null;
-        setStatus("loading");
-        setStatusText("Generating world from seed…");
-        setFrameSrc(fmgSrc({ seed: map.data!.seed }));
+        const text = asMapFileText(raw);
+        if (looksLikeMapFile(text)) {
+          rememberMapText(map.data!.map_asset, text);
+          pendingMapTextRef.current = text;
+          setFrameSrc(fmgSrc({ mapId, saved: true }));
+          return;
+        }
+        forgetMapText(map.data!.map_asset);
       }
+      pendingMapTextRef.current = null;
+      setStatus("loading");
+      setStatusText("Generating world from seed…");
+      setFrameSrc(fmgSrc({ seed: map.data!.seed }));
     })().catch((error) => {
       if (!cancelled) {
         setStatus("error");
@@ -209,7 +213,25 @@ function MapView({ mapId, active, onDeleted }: { mapId: string; active: boolean;
     // map_asset is omitted: auto-cache writes it after first generate and must not remount the iframe.
   }, [map.data?.id, map.data?.seed, mapId, frameEpoch]);
 
-  // Boot: with a saved .map, ?maplink= stops Azgaar generating a throwaway world; we upload the file ourselves.
+  // Serve the .map through Azgaar's ?maplink= fetch before it can hit Vite and parse HTML as a save.
+  useEffect(() => {
+    const frame = frameRef.current;
+    if (!frame || !frameSrc) return;
+    const tick = () => {
+      const w = frame.contentWindow as FmgWindow | null;
+      const text = pendingMapTextRef.current;
+      if (w && text) installMapLinkFetch(w, text);
+    };
+    tick();
+    const id = window.setInterval(tick, 16);
+    frame.addEventListener("load", tick);
+    return () => {
+      window.clearInterval(id);
+      frame.removeEventListener("load", tick);
+    };
+  }, [frameSrc, frameEpoch]);
+
+  // Boot: ?maplink= skips throwaway generation; the fetch hook above returns the campaign file.
   useEffect(() => {
     const frame = frameRef.current;
     if (!frame || !frameSrc || !map.data) return;
@@ -220,10 +242,12 @@ function MapView({ mapId, active, onDeleted }: { mapId: string; active: boolean;
         if (cancelled) return;
         const savedText = pendingMapTextRef.current;
         if (savedText) {
-          suppressFollowupMapLink(w);
+          installMapLinkFetch(w, savedText);
           setStatusText("Loading saved map…");
-          await loadMapData(w, savedText);
           loadedAssetRef.current = map.data!.map_asset;
+          window.setTimeout(() => {
+            if (!cancelled && !isReady(w)) void loadMapData(w, savedText);
+          }, 2500);
         }
         await waitForMap(frame);
         if (cancelled) return;
@@ -246,15 +270,17 @@ function MapView({ mapId, active, onDeleted }: { mapId: string; active: boolean;
         }
         if (!map.data!.map_asset) {
           setStatusText("Caching world for next time…");
-          const text = await exportMapData(w);
+          const text = asMapFileText(await exportMapData(w));
           if (cancelled) return;
-          const asset = await platform.writeTextAsset("maps", "map", text);
-          rememberMapText(asset.rel_path, text);
-          if (campaignId) await repos.assets.register({ campaign_id: campaignId, rel_path: asset.rel_path, kind: "map", file_name: asset.file_name, size: asset.size }).catch(() => undefined);
-          patch.map_asset = asset.rel_path;
-          patch.map_created = Date.now();
-          loadedAssetRef.current = asset.rel_path;
-          setDirty(false);
+          if (looksLikeMapFile(text)) {
+            const asset = await platform.writeTextAsset("maps", "map", text);
+            rememberMapText(asset.rel_path, text);
+            if (campaignId) await repos.assets.register({ campaign_id: campaignId, rel_path: asset.rel_path, kind: "map", file_name: asset.file_name, size: asset.size }).catch(() => undefined);
+            patch.map_asset = asset.rel_path;
+            patch.map_created = Date.now();
+            loadedAssetRef.current = asset.rel_path;
+            setDirty(false);
+          }
         }
         if (Object.keys(patch).length) await repos.worldMaps.update(mapId, patch).then(invalidateMap);
         if (!cancelled) setStatusText("");
@@ -346,7 +372,7 @@ function MapView({ mapId, active, onDeleted }: { mapId: string; active: boolean;
   const saveMap = useAction(
     async () => {
       if (!win) throw new Error("Map not ready");
-      const text = await exportMapData(win);
+      const text = asMapFileText(await exportMapData(win));
       const asset = await platform.writeTextAsset("maps", "map", text, map.data?.map_asset ?? null);
       rememberMapText(asset.rel_path, text);
       loadedAssetRef.current = asset.rel_path;

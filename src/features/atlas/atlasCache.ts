@@ -13,7 +13,20 @@ export function forgetMapText(assetPath: string): void {
   mapTextByAsset.delete(assetPath);
 }
 
-/** Same-origin dummy URL. Azgaar only uses it to skip random generation; we serve/upload the file ourselves. */
+/** Azgaar splits saves on CRLF and requires a version header plus the SVG payload. */
+export function looksLikeMapFile(text: string): boolean {
+  if (!text || text.length < 80) return false;
+  const trimmed = text.trimStart();
+  if (trimmed.startsWith("<!") || trimmed.startsWith("<html")) return false;
+  const parts = text.includes("\r\n") ? text.split("\r\n") : text.split("\n");
+  return parts.length >= 10 && parts[0]!.includes("|") && (parts[5]?.includes("<svg") ?? false);
+}
+
+export function asMapFileText(text: string): string {
+  return text.includes("\r\n") ? text : text.replace(/\n/g, "\r\n");
+}
+
+/** Same-origin dummy URL. Azgaar only uses it to skip random generation; we intercept the fetch. */
 export function mapLinkFor(mapId: string): string {
   return `${window.location.origin}/__atlas-map/${mapId}.map`;
 }

@@ -128,6 +128,24 @@ export function suppressFollowupMapLink(win: FmgWindow): void {
   if (win.Services?.Load) win.Services.Load.loadMapFromURL = async () => undefined;
 }
 
+const MAP_FETCH_HOOK = "__dmWorkbenchMapFetch";
+
+/** Serve the campaign .map when Azgaar fetches the dummy ?maplink= URL (otherwise Vite returns HTML). */
+export function installMapLinkFetch(win: FmgWindow, text: string): void {
+  const flagged = win as unknown as Record<string, unknown>;
+  if (flagged[MAP_FETCH_HOOK]) return;
+  flagged[MAP_FETCH_HOOK] = true;
+  const orig = win.fetch.bind(win);
+  const body = text.includes("\r\n") ? text : text.replace(/\n/g, "\r\n");
+  win.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
+    const url = typeof input === "string" ? input : input instanceof URL ? input.href : input instanceof Request ? input.url : "";
+    if (url.includes("/__atlas-map/")) {
+      return Promise.resolve(new Response(body, { status: 200, headers: { "Content-Type": "text/plain" } }));
+    }
+    return orig(input, init);
+  }) as typeof win.fetch;
+}
+
 /** Waits until the generator has a map in memory. */
 export function waitForMap(frame: HTMLIFrameElement, timeoutMs = 120_000): Promise<FmgWindow> {
   return new Promise((resolve, reject) => {
@@ -468,5 +486,6 @@ export async function exportMapData(win: FmgWindow): Promise<string> {
 
 export async function loadMapData(win: FmgWindow, text: string): Promise<void> {
   if (!win.Services) throw new Error("Map generator services unavailable");
-  await win.Services.Load.uploadMap(new Blob([text], { type: "text/plain" }));
+  const body = text.includes("\r\n") ? text : text.replace(/\n/g, "\r\n");
+  await win.Services.Load.uploadMap(new Blob([body], { type: "text/plain" }));
 }
