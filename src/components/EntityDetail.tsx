@@ -50,7 +50,11 @@ export function EntityDetail({ id, kinds, extras, afterDelete }: { id: string; k
 
   const save = useAction(
     async () => {
-      const input = draftToInput(draft!, campaignId, entity.data!.world_id);
+      // Preserve the record's existing scope: shared library records (campaign_id === null, e.g.
+      // the SRD standard set) stay shared when edited rather than being pulled into this campaign.
+      const scope = entity.data!.campaign_id ?? null;
+      const input = draftToInput(draft!, scope ?? campaignId, entity.data!.world_id);
+      if (scope === null) input.campaign_id = null;
       return repos.entities.update(id, input);
     },
     { success: "Saved", invalidate: [["entities"], ["ancestors", id], ["children"]], onSuccess: () => setEditing(false) },
@@ -62,7 +66,11 @@ export function EntityDetail({ id, kinds, extras, afterDelete }: { id: string; k
   const duplicate = useAction(
     async () => {
       const e = entity.data!;
-      return repos.entities.create({ ...e, id: undefined, name: `${e.name} (copy)` } as never);
+      // A copy always belongs to the current campaign and is "custom": clearing the source marker
+      // turns a duplicated standard (SRD) record into an editable campaign-owned record.
+      const fields = { ...(e.fields as Record<string, unknown>) };
+      if ("source" in fields) fields.source = "";
+      return repos.entities.create({ ...e, id: undefined, campaign_id: campaignId, fields, name: `${e.name} (copy)` } as never);
     },
     { success: "Duplicated", onSuccess: (created) => navigate(routeForEntity(created)) },
   );
@@ -103,6 +111,9 @@ export function EntityDetail({ id, kinds, extras, afterDelete }: { id: string; k
             <Badge tone="ember">{KIND_LABELS[e.kind]}</Badge>
             {e.subtype && <Badge>{e.subtype}</Badge>}
             {e.status && <Badge tone="water">{e.status}</Badge>}
+            {e.campaign_id === null && typeof e.fields.source === "string" && e.fields.source && (
+              <Badge tone="gold">Standard (SRD) · shared by all campaigns</Badge>
+            )}
           </span>
         }
         subtitle={

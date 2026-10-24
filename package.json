@@ -15,6 +15,7 @@
     "desktop:build:nsis": "tauri build --bundles nsis",
     "fmg:install": "node scripts/fmg-install.mjs",
     "fmg:build": "node scripts/fmg-build.mjs",
+    "srd:build": "node scripts/build-srd2024.mjs",
     "setup": "npm install && npm run fmg:install && npm run fmg:build",
     "test": "vitest run",
     "test:watch": "vitest",

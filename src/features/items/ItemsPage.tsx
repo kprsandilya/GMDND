@@ -13,7 +13,8 @@ export function ItemsPage() {
       title="Items & Equipment"
       kinds={["item", "spell"]}
       basePath="/items"
-      description="Item definitions are templates. Physical copies live as instances in character, room, container, shop or hoard inventories."
+      library
+      description="Item definitions are templates. The standard SRD 2024 items and magic items are available in every campaign; your own entries are 'Custom'. Physical copies live as instances in character, room, container, shop or hoard inventories."
       rowMeta={(e) => (e.kind === "item" ? `${e.fields.category ?? ""} · ${e.fields.rarity ?? ""}${e.fields.magical ? " · magical" : ""}` : `Level ${e.fields.level ?? 0} ${e.fields.school ?? ""}`)}
       extras={{
         tabs: [{ value: "instances", label: "Instances", render: (e) => <Instances entity={e} /> }],
