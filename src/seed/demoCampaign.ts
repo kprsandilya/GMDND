@@ -503,6 +503,391 @@ Notable places: [[The Drowned Lantern]], [[Cistern of the Drowned Saint]].`,
   const fields = campaignFieldsSchema.parse({ ...campaign.fields, party_location_id: town.id, active_session_id: session.id });
   await E.update(C, { fields });
   await repos.campaignLog.add(C, "campaign", "Demo campaign seeded.", {});
+
+  // ── Journey & timeline demo data ──
+  // Demonstrates backstory, party travel, membership changes, and timeline events.
+
+  // Extra backstory locations
+  const northVillage = await make({
+    kind: "settlement",
+    name: "Ashvale",
+    campaign_id: C,
+    world_id: W,
+    parent_id: region.id,
+    summary: "A small farming hamlet in the northern marshes where Kaelen grew up.",
+    fields: { population: "120", discovered: false },
+    tags: ["backstory"],
+  });
+  const ostkeep = await make({
+    kind: "settlement",
+    name: "Ostkeep",
+    campaign_id: C,
+    world_id: W,
+    parent_id: kingdom.id,
+    summary: "The distant capital of Ostmark, where Kaelen served in the levy.",
+    body_md: "A grey fortress city at the confluence of two rivers. The King's levy musters here each spring.",
+    fields: { population: "12,000", government: "King Aldren III", discovered: false },
+    tags: ["backstory", "city"],
+  });
+  const fenCrossing = await make({
+    kind: "settlement",
+    name: "Fen Crossing",
+    campaign_id: C,
+    world_id: W,
+    parent_id: region.id,
+    summary: "A stilt-bridge village on the road between Ostkeep and Hollowmere.",
+    fields: { population: "300", discovered: false },
+    tags: ["backstory"],
+  });
+
+  // ── Party: The Hollowmere Expedition ──
+  const party = await make({
+    kind: "faction",
+    name: "The Hollowmere Expedition",
+    campaign_id: C,
+    summary: "The adventuring party assembled by Tamsin Reed to find Brother Oswick.",
+    body_md: "Formed at [[The Drowned Lantern]] in Seedtide 1247. Originally Kaelen and Nyx; Brother Oswick accompanies them after rescue.",
+    fields: { faction_type: "adventuring party", goals: "Find Oswick, expose the Choir, protect Hollowmere.", influence: 2 },
+    tags: ["party"],
+    subtype: "party",
+  });
+  // Party memberships (time-aware)
+  await repos.journeys.addMembership({
+    party_id: party.id,
+    entity_id: kaelen.id,
+    role: "Fighter",
+    joined_session_id: session.id,
+    left_session_id: null,
+    joined_year: 1247,
+    joined_month: 4,
+    joined_day: 12,
+    left_year: null,
+    left_month: null,
+    left_day: null,
+    notes: "Founding member. Tamsin recruited him at the Drowned Lantern.",
+  });
+  await repos.journeys.addMembership({
+    party_id: party.id,
+    entity_id: nyx.id,
+    role: "Rogue",
+    joined_session_id: session.id,
+    left_session_id: null,
+    joined_year: 1247,
+    joined_month: 4,
+    joined_day: 12,
+    left_year: null,
+    left_month: null,
+    left_day: null,
+    notes: "Founding member. Knows the canal ways better than anyone.",
+  });
+
+  // ── Kaelen's backstory journey ──
+  const kaelenBackstory = await repos.journeys.createJourney({
+    campaign_id: C,
+    party_id: null,
+    session_id: null,
+    name: "Kaelen's Early Years",
+    category: "backstory",
+    description: "Kaelen grew up in Ashvale, served in the Ostkeep levy, then traveled south to Hollowmere seeking work.",
+    dm_notes: "He still writes letters to his levy mates. A hook for later sessions — one of them may show up in trouble.",
+    route_certainty: "approximate",
+    start_year: 1225,
+    start_month: null,
+    start_day: null,
+    end_year: 1247,
+    end_month: 4,
+    end_day: 10,
+    sort_order: 0,
+  });
+  // Segment 1: Birth village → Ostkeep (levy service)
+  const kbSeg1 = await repos.journeys.createSegment({
+    journey_id: kaelenBackstory.id,
+    origin_entity_id: northVillage.id,
+    destination_entity_id: ostkeep.id,
+    waypoints: [],
+    start_year: 1240,
+    start_month: null,
+    start_day: null,
+    end_year: 1244,
+    end_month: null,
+    end_day: null,
+    route_certainty: "estimated",
+    notes: "Four years serving in King Aldren's levy.",
+    sort_order: 0,
+  });
+  await repos.journeys.addParticipant({ segment_id: kbSeg1.id, entity_id: kaelen.id, role: "traveler", notes: "" });
+  // Segment 2: Ostkeep → Fen Crossing → Hollowmere
+  const kbSeg2 = await repos.journeys.createSegment({
+    journey_id: kaelenBackstory.id,
+    origin_entity_id: ostkeep.id,
+    destination_entity_id: town.id,
+    waypoints: [{ entity_id: fenCrossing.id }],
+    start_year: 1244,
+    start_month: null,
+    start_day: null,
+    end_year: 1247,
+    end_month: 4,
+    end_day: 10,
+    route_certainty: "estimated",
+    notes: "Wandered south after the levy disbanded. Took odd guard jobs along the way.",
+    sort_order: 1,
+  });
+  await repos.journeys.addParticipant({ segment_id: kbSeg2.id, entity_id: kaelen.id, role: "traveler", notes: "" });
+
+  // ── Nyx's backstory journey ──
+  const nyxBackstory = await repos.journeys.createJourney({
+    campaign_id: C,
+    party_id: null,
+    session_id: null,
+    name: "Nyx's Canal Childhood",
+    category: "backstory",
+    description: "Nyx grew up orphaned on Hollowmere's canals. Brother Oswick fed her when she had nothing.",
+    dm_notes: "Nyx's bond with Oswick is her primary motivation. She might take reckless risks to save him.",
+    route_certainty: "approximate",
+    start_year: 1230,
+    start_month: null,
+    start_day: null,
+    end_year: 1247,
+    end_month: 4,
+    end_day: 12,
+    sort_order: 1,
+  });
+  const nbSeg1 = await repos.journeys.createSegment({
+    journey_id: nyxBackstory.id,
+    origin_entity_id: town.id,
+    destination_entity_id: town.id,
+    waypoints: [],
+    start_year: 1230,
+    start_month: null,
+    start_day: null,
+    end_year: 1247,
+    end_month: null,
+    end_day: null,
+    route_certainty: "confirmed",
+    notes: "Lived in Hollowmere her whole life. Knows every drain and rooftop.",
+    sort_order: 0,
+  });
+  await repos.journeys.addParticipant({ segment_id: nbSeg1.id, entity_id: nyx.id, role: "traveler", notes: "" });
+
+  // ── Session 1 party journey: The Drowned Lantern → Cistern ──
+  const session1Journey = await repos.journeys.createJourney({
+    campaign_id: C,
+    party_id: party.id,
+    session_id: session.id,
+    name: "Into the Cistern",
+    category: "party",
+    description: "The newly formed party descends into the Cistern of the Drowned Saint to find Brother Oswick.",
+    dm_notes: "The dungeon crawl: entry → flooded hall → guard post ambush → reliquary → shrine.",
+    route_certainty: "known",
+    start_year: 1247,
+    start_month: 4,
+    start_day: 12,
+    end_year: 1247,
+    end_month: 4,
+    end_day: 12,
+    sort_order: 2,
+  });
+  // Segment 1: Drowned Lantern → Cistern entrance
+  const s1Seg1 = await repos.journeys.createSegment({
+    journey_id: session1Journey.id,
+    origin_entity_id: tavern.id,
+    destination_entity_id: dungeon.id,
+    waypoints: [],
+    start_year: 1247,
+    start_month: 4,
+    start_day: 12,
+    end_year: 1247,
+    end_month: 4,
+    end_day: 12,
+    route_certainty: "confirmed",
+    notes: "Tamsin points them to the chapel grate behind the square.",
+    sort_order: 0,
+  });
+  await repos.journeys.addParticipant({ segment_id: s1Seg1.id, entity_id: kaelen.id, role: "traveler", notes: "" });
+  await repos.journeys.addParticipant({ segment_id: s1Seg1.id, entity_id: nyx.id, role: "traveler", notes: "" });
+
+  // ── Timeline events: Kaelen ──
+  await repos.timeline.create({
+    campaign_id: C,
+    entity_id: kaelen.id,
+    title: "Born in Ashvale",
+    body_md: "Kaelen was born to a farming family in the small hamlet of Ashvale in the northern Greyfen Marches.",
+    year: 1225, month: null, day: null,
+    kind: "history",
+    secret: false,
+    category: "birth",
+    location_id: northVillage.id,
+    confidence: "certain",
+  });
+  await repos.timeline.create({
+    campaign_id: C,
+    entity_id: kaelen.id,
+    title: "Joined the Ostkeep Levy",
+    body_md: "At fifteen, Kaelen answered the King's call and marched to Ostkeep to serve in the levy for four years.",
+    year: 1240, month: null, day: null,
+    kind: "history",
+    secret: false,
+    category: "backstory",
+    location_id: ostkeep.id,
+    journey_id: kaelenBackstory.id,
+    segment_id: kbSeg1.id,
+    confidence: "certain",
+  });
+  await repos.timeline.create({
+    campaign_id: C,
+    entity_id: kaelen.id,
+    title: "Levy disbanded — heads south",
+    body_md: "The levy was dissolved. Kaelen drifted south taking guard work, eventually reaching Hollowmere.",
+    year: 1244, month: null, day: null,
+    kind: "history",
+    secret: false,
+    category: "travel",
+    journey_id: kaelenBackstory.id,
+    segment_id: kbSeg2.id,
+    confidence: "certain",
+  });
+  await repos.timeline.create({
+    campaign_id: C,
+    entity_id: kaelen.id,
+    title: "Arrived in Hollowmere",
+    body_md: "Kaelen settles in Hollowmere, picking up work at the docks and taverns.",
+    year: 1247,
+    month: 3,
+    day: null,
+    kind: "campaign",
+    secret: false,
+    category: "residence",
+    location_id: town.id,
+    confidence: "certain",
+  });
+
+  // ── Timeline events: Nyx ──
+  await repos.timeline.create({
+    campaign_id: C,
+    entity_id: nyx.id,
+    title: "Born in Hollowmere (parents unknown)",
+    body_md: "Nyx was found as an infant on the canal banks. No one knows who left her there.",
+    year: 1230, month: null, day: null,
+    kind: "history",
+    secret: false,
+    category: "birth",
+    location_id: town.id,
+    confidence: "probable",
+  });
+  await repos.timeline.create({
+    campaign_id: C,
+    entity_id: nyx.id,
+    title: "Oswick feeds a starving child",
+    body_md: "Brother Oswick found Nyx stealing candles from the chapel and gave her food instead of punishment. She never forgot.",
+    year: 1238, month: null, day: null,
+    kind: "history",
+    secret: false,
+    category: "meeting",
+    location_id: town.id,
+    confidence: "certain",
+  });
+  await repos.timeline.create({
+    campaign_id: C,
+    entity_id: nyx.id,
+    title: "Learned the canal routes",
+    body_md: "By her teens, Nyx knew every drain, rooftop, and hidden passage in Hollowmere. She began working as an informal guide and occasional thief.",
+    year: 1244, month: null, day: null,
+    kind: "history",
+    secret: false,
+    category: "backstory",
+    location_id: town.id,
+    journey_id: nyxBackstory.id,
+    confidence: "certain",
+  });
+
+  // ── Timeline events: Session 1 (both characters) ──
+  const meetingEvent = await repos.timeline.create({
+    campaign_id: C,
+    entity_id: kaelen.id,
+    title: "Kaelen and Nyx meet at the Drowned Lantern",
+    body_md: "Tamsin introduces the two strangers and offers 50 gp to find Brother Oswick. Kaelen accepts for the coin; Nyx accepts for Oswick.",
+    year: 1247,
+    month: 4,
+    day: 12,
+    kind: "campaign",
+    secret: false,
+    category: "meeting",
+    session_id: session.id,
+    location_id: tavern.id,
+    confidence: "certain",
+    manual_order: 0,
+  });
+  // Both characters participate in this event
+  await repos.journeys.addEventParticipant(meetingEvent.id, nyx.id, "met");
+
+  const partyFormedEvent = await repos.timeline.create({
+    campaign_id: C,
+    entity_id: kaelen.id,
+    title: "The Hollowmere Expedition is formed",
+    body_md: "Kaelen and Nyx agree to work together. They head for the sealed cistern beneath the chapel.",
+    year: 1247,
+    month: 4,
+    day: 12,
+    kind: "campaign",
+    secret: false,
+    category: "milestone",
+    session_id: session.id,
+    journey_id: session1Journey.id,
+    location_id: tavern.id,
+    confidence: "certain",
+    manual_order: 1,
+  });
+  await repos.journeys.addEventParticipant(partyFormedEvent.id, nyx.id, "founding member");
+
+  await repos.timeline.create({
+    campaign_id: C,
+    entity_id: kaelen.id,
+    title: "Guard Post Ambush",
+    body_md: "The party stumbles into the Drowned Choir's picket in the guard post. Three cultists and their adept attack.",
+    year: 1247,
+    month: 4,
+    day: 12,
+    kind: "campaign",
+    secret: false,
+    category: "battle",
+    session_id: session.id,
+    journey_id: session1Journey.id,
+    location_id: dungeon.id,
+    confidence: "certain",
+    manual_order: 2,
+  });
+
+  await repos.timeline.create({
+    campaign_id: C,
+    entity_id: nyx.id,
+    title: "Discovered the Waterlogged Journal",
+    body_md: "Nyx searches the bookshelf in the Sunken Shrine and finds a ledger with Vorn's seal — proof that the Harbor Master funds the Drowned Choir.",
+    year: 1247,
+    month: 4,
+    day: 12,
+    kind: "campaign",
+    secret: true,
+    category: "discovery",
+    session_id: session.id,
+    location_id: dungeon.id,
+    confidence: "certain",
+    manual_order: 3,
+  });
+
+  // ── DM plot hook event ──
+  await repos.timeline.create({
+    campaign_id: C,
+    entity_id: kaelen.id,
+    title: "A letter from an old levy mate",
+    body_md: "Hook for future sessions: one of Kaelen's levy companions writes asking for help. Something is wrong in Ostkeep.",
+    year: null,
+    month: null,
+    day: null,
+    kind: "scheduled",
+    secret: true,
+    category: "plot_hook",
+    confidence: "uncertain",
+  });
   void obj3;
 
   return { campaign: C, world: W, dungeon: dungeon.id, floor: floor.id, rooms, chest: chest.id, pcs: [kaelen.id, nyx.id] };

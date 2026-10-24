@@ -1,9 +1,21 @@
 import type { AssetRecord, CampaignLogEntry, QuestObjective, SessionNote, TimelineEvent } from "@/domain/types";
+import type { ConfidenceLevel, TimelineEventCategory } from "@/domain/journeyTypes";
 import type { Row, SqlDriver, Statement } from "../driver";
 import { bool, buildSet, int, json, newId, now, num, parseJson, requireRow, str, text } from "./common";
 
+/** Extra columns added to timeline_events by migration v3 (not part of the base TimelineEvent interface). */
+export interface TimelineEventExtendedFields {
+  category?: TimelineEventCategory;
+  session_id?: string | null;
+  journey_id?: string | null;
+  segment_id?: string | null;
+  location_id?: string | null;
+  confidence?: ConfidenceLevel;
+  manual_order?: number;
+}
+
 export class QuestRepository {
-  constructor(private readonly db: SqlDriver) {}
+  constructor(private readonly db: SqlDriver) { }
 
   async objectives(questId: string): Promise<QuestObjective[]> {
     const rows = await this.db.select("SELECT * FROM quest_objectives WHERE quest_id = ? ORDER BY sort_order, rowid", [questId]);
@@ -54,23 +66,43 @@ function mapObjective(row: Row): QuestObjective {
 }
 
 export class TimelineRepository {
-  constructor(private readonly db: SqlDriver) {}
+  constructor(private readonly db: SqlDriver) { }
 
   async list(campaignId: string): Promise<TimelineEvent[]> {
     const rows = await this.db.select(
-      "SELECT * FROM timeline_events WHERE campaign_id = ? ORDER BY year IS NULL, year, month IS NULL, month, day IS NULL, day, created_at",
+      "SELECT * FROM timeline_events WHERE campaign_id = ? ORDER BY manual_order ASC, year IS NULL, year, month IS NULL, month, day IS NULL, day, created_at",
       [campaignId],
     );
     return rows.map(mapTimeline);
   }
 
-  async create(input: Omit<TimelineEvent, "id" | "created_at" | "updated_at">): Promise<TimelineEvent> {
+  async create(input: Omit<TimelineEvent, "id" | "created_at" | "updated_at"> & TimelineEventExtendedFields): Promise<TimelineEvent> {
     const id = newId();
     const ts = now();
     await this.db.execute(
-      `INSERT INTO timeline_events (id, campaign_id, entity_id, title, body_md, year, month, day, kind, secret, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [id, input.campaign_id, input.entity_id, input.title, input.body_md, input.year, input.month, input.day, input.kind, int(input.secret), ts, ts],
+      `INSERT INTO timeline_events (id, campaign_id, entity_id, title, body_md, year, month, day, kind, secret, category, session_id, journey_id, segment_id, location_id, confidence, manual_order, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        id,
+        input.campaign_id,
+        input.entity_id,
+        input.title,
+        input.body_md,
+        input.year,
+        input.month,
+        input.day,
+        input.kind,
+        int(input.secret),
+        input.category ?? "general",
+        input.session_id ?? null,
+        input.journey_id ?? null,
+        input.segment_id ?? null,
+        input.location_id ?? null,
+        input.confidence ?? "certain",
+        input.manual_order ?? 0,
+        ts,
+        ts,
+      ],
     );
     return this.get(id);
   }
@@ -80,7 +112,7 @@ export class TimelineRepository {
     return mapTimeline(requireRow(rows, "Timeline event", id));
   }
 
-  async update(id: string, patch: Partial<Omit<TimelineEvent, "id" | "created_at">>): Promise<TimelineEvent> {
+  async update(id: string, patch: Partial<Omit<TimelineEvent, "id" | "created_at">> & TimelineEventExtendedFields): Promise<TimelineEvent> {
     const { set, params, empty } = buildSet({ ...patch, updated_at: now() }, { secret: int });
     if (!empty) await this.db.execute(`UPDATE timeline_events SET ${set} WHERE id = ?`, [...params, id]);
     return this.get(id);
@@ -109,7 +141,7 @@ function mapTimeline(row: Row): TimelineEvent {
 }
 
 export class SessionNoteRepository {
-  constructor(private readonly db: SqlDriver) {}
+  constructor(private readonly db: SqlDriver) { }
 
   async list(sessionId: string): Promise<SessionNote[]> {
     const rows = await this.db.select("SELECT * FROM session_notes WHERE session_id = ? ORDER BY created_at", [sessionId]);
@@ -155,7 +187,7 @@ function mapSessionNote(row: Row): SessionNote {
 }
 
 export class CampaignLogRepository {
-  constructor(private readonly db: SqlDriver) {}
+  constructor(private readonly db: SqlDriver) { }
 
   statement(campaignId: string, kind: string, message: string, refs: Record<string, string> = {}, sessionId: string | null = null): Statement {
     return {
@@ -197,7 +229,7 @@ export class CampaignLogRepository {
 }
 
 export class SettingsRepository {
-  constructor(private readonly db: SqlDriver) {}
+  constructor(private readonly db: SqlDriver) { }
 
   async get<T>(key: string, fallback: T): Promise<T> {
     const rows = await this.db.select<{ value: string }>("SELECT value FROM settings WHERE key = ?", [key]);
@@ -215,7 +247,7 @@ export class SettingsRepository {
 }
 
 export class AssetRepository {
-  constructor(private readonly db: SqlDriver) {}
+  constructor(private readonly db: SqlDriver) { }
 
   async register(input: Omit<AssetRecord, "id" | "created_at">): Promise<AssetRecord> {
     const id = newId();

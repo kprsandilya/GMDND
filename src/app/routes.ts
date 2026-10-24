@@ -29,6 +29,7 @@ export const MODULE_FOR_KIND: Record<EntityKind, string> = {
   document: "lore",
   encounter: "encounters",
   session: "sessions",
+  party: "parties",
 };
 
 export function routeForEntity(entity: Pick<Entity, "id" | "kind" | "parent_id">): string {
@@ -46,8 +47,10 @@ export const NAV_ITEMS: { to: string; label: string; icon: string; shortcut?: st
   { to: "/dungeons", label: "Dungeons & Maps", icon: "Grid3x3", shortcut: "5" },
   { to: "/encounters", label: "Encounters", icon: "Swords", shortcut: "6" },
   { to: "/characters", label: "Characters & NPCs", icon: "Users", shortcut: "7" },
-  { to: "/items", label: "Items & Equipment", icon: "Package", shortcut: "8" },
-  { to: "/creatures", label: "Creatures", icon: "Skull", shortcut: "9" },
+  { to: "/parties", label: "Parties", icon: "UsersRound", shortcut: "8" },
+  { to: "/journeys", label: "Journeys", icon: "Route", shortcut: "9" },
+  { to: "/items", label: "Items & Equipment", icon: "Package" },
+  { to: "/creatures", label: "Creatures", icon: "Skull" },
   { to: "/quests", label: "Quests & Events", icon: "ScrollText" },
   { to: "/lore", label: "Lore & Documents", icon: "Library" },
   { to: "/timeline", label: "Timeline", icon: "CalendarClock" },

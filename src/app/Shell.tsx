@@ -10,12 +10,14 @@ import {
   MapPin,
   Package,
   Play,
+  Route,
   ScrollText,
   Search,
   Settings,
   Skull,
   Swords,
   Users,
+  UsersRound,
   type LucideIcon,
 } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -28,7 +30,7 @@ import { CommandPalette } from "./CommandPalette";
 import { useCampaign } from "./queries";
 import { NAV_ITEMS } from "./routes";
 
-const ICONS: Record<string, LucideIcon> = { LayoutDashboard, BookOpen, Globe2, MapPin, Grid3x3, Swords, Users, Package, Skull, ScrollText, Library, CalendarClock, Play, Search, Settings };
+const ICONS: Record<string, LucideIcon> = { LayoutDashboard, BookOpen, Globe2, MapPin, Grid3x3, Swords, Users, UsersRound, Route, Package, Skull, ScrollText, Library, CalendarClock, Play, Search, Settings };
 
 export function Shell() {
   const collapsed = useAppStore((s) => s.settings.sidebarCollapsed);

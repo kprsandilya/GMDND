@@ -3,6 +3,7 @@ import { DungeonRepository } from "./dungeons";
 import { EncounterRepository } from "./encounters";
 import { EntityRepository } from "./entities";
 import { InventoryRepository } from "./inventory";
+import { JourneyRepository } from "./journeys";
 import { AssetRepository, CampaignLogRepository, QuestRepository, SessionNoteRepository, SettingsRepository, TimelineRepository } from "./misc";
 import { WorldMapRepository } from "./worldMaps";
 
@@ -14,6 +15,7 @@ export interface Repositories {
   dungeons: DungeonRepository;
   inventory: InventoryRepository;
   encounters: EncounterRepository;
+  journeys: JourneyRepository;
   quests: QuestRepository;
   timeline: TimelineRepository;
   sessionNotes: SessionNoteRepository;
@@ -30,6 +32,7 @@ export function createRepositories(driver: SqlDriver): Repositories {
     dungeons: new DungeonRepository(driver),
     inventory: new InventoryRepository(driver),
     encounters: new EncounterRepository(driver),
+    journeys: new JourneyRepository(driver),
     quests: new QuestRepository(driver),
     timeline: new TimelineRepository(driver),
     sessionNotes: new SessionNoteRepository(driver),
@@ -39,5 +42,5 @@ export function createRepositories(driver: SqlDriver): Repositories {
   };
 }
 
-export { DungeonRepository, EncounterRepository, EntityRepository, InventoryRepository, WorldMapRepository };
+export { DungeonRepository, EncounterRepository, EntityRepository, InventoryRepository, JourneyRepository, WorldMapRepository };
 export { AssetRepository, CampaignLogRepository, QuestRepository, SessionNoteRepository, SettingsRepository, TimelineRepository };

@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Crosshair, Download, ExternalLink, Eye, EyeOff, FolderOpen, Link2, Link2Off, Map as MapIcon, Pencil, Plus, RefreshCw, Save, Search, Trash2, X } from "lucide-react";
+import { Crosshair, Download, ExternalLink, Eye, EyeOff, FolderOpen, Link2, Link2Off, Map as MapIcon, Pencil, Plus, RefreshCw, Route, Save, Search, Trash2, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate, useSearchParams } from "react-router";
 import { toast } from "sonner";
@@ -11,11 +11,17 @@ import { routeForEntity } from "@/app/routes";
 import { EntityPicker } from "@/components/EntityPicker";
 import { MarkdownView } from "@/components/Markdown";
 import { Badge, Button, Checkbox, ConfirmDialog, Dialog, EmptyState, Field, Input, Select, Spinner, Textarea, Tooltip } from "@/components/ui";
+import type { EnrichedSegment, RouteFilters } from "@/domain/journeyTypes";
 import { GEOGRAPHIC_KINDS, type Entity, type EntityKind, type MapAnnotation, type MapFeatureLink, type WorldMap } from "@/domain/types";
 import { cn, errorMessage } from "@/lib/utils";
 import { DEMO_MAP_SEED } from "@/seed/demoCampaign";
 import { asMapFileText, fmgSrc, forgetMapText, looksLikeMapFile, recalledMapText, rememberMapText } from "./atlasCache";
 import { dismissUpdateDialog, exportMapData, featureAt, iframeClientToMap, installExternalLinkHook, installMapLinkFetch, isReady, listFeatures, loadMapData, renderOverlay, waitForMap, waitForServices, zoomScaleFor, zoomTo, type FmgFeature, type FmgWindow } from "./fmgBridge";
+import { JourneyFilterToolbar } from "./JourneyFilterToolbar";
+import { clearRouteOverlay, renderRouteOverlay, RouteLegend } from "./RouteOverlay";
+import { JourneyPlayback, usePlaybackStore } from "./JourneyPlayback";
+import { RouteComparison } from "./RouteComparison";
+import { SegmentDetailPanel } from "./SegmentDetailPanel";
 
 const ANNOTATION_COLORS: Record<MapAnnotation["kind"], string> = { poi: "#d9a441", note: "#8fb3c9", secret: "#b58cf0", quest: "#e0893f", encounter: "#c4524a", danger: "#ff5a5a" };
 const LINK_COLOR = "#f0c674";
@@ -156,6 +162,24 @@ function MapView({ mapId, active, onDeleted }: { mapId: string; active: boolean;
   const links = useQuery({ queryKey: [...qk.worldMap(mapId), "links"], queryFn: () => repos.worldMaps.featureLinks(mapId) });
   const annotations = useQuery({ queryKey: [...qk.worldMap(mapId), "annotations"], queryFn: () => repos.worldMaps.annotations(mapId) });
   const places = useEntities({ kinds: [...GEOGRAPHIC_KINDS] });
+  // ── Entity lists for journey filter toolbar ──
+  const characters = useEntities({ kinds: ["pc", "npc"] });
+  const parties = useEntities({ kinds: ["party"] });
+  const sessions = useEntities({ kinds: ["session"] });
+  // ── Journey overlay state (Req 9.1, 9.10, 18.3) ──
+  const [journeyOverlayActive, setJourneyOverlayActive] = useState(false);
+  const [routeFilters, setRouteFilters] = useState<RouteFilters>({});
+  const [selectedSegmentId, setSelectedSegmentId] = useState<string | null>(null);
+  const [selectedLocationId, setSelectedLocationId] = useState<string | null>(null);
+  const [selectedLocationName, setSelectedLocationName] = useState<string | null>(null);
+  const [playbackVisibleSegs, setPlaybackVisibleSegs] = useState<EnrichedSegment[]>([]);
+  const playbackActive = usePlaybackStore((s) => s.active);
+  // ── Enriched segments for journey overlay ──
+  const journeySegments = useQuery({
+    queryKey: [...qk.worldMap(mapId), "journeySegments", routeFilters],
+    queryFn: () => repos.journeys.enrichedSegmentsForMap(campaignId!, mapId, routeFilters),
+    enabled: !!campaignId && journeyOverlayActive,
+  });
   const frameRef = useRef<HTMLIFrameElement>(null);
   const [win, setWin] = useState<FmgWindow | null>(null);
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
@@ -323,10 +347,105 @@ function MapView({ mapId, active, onDeleted }: { mapId: string; active: boolean;
       ...(annotations.data ?? []).filter((a) => !a.hidden).map((a) => ({ id: a.id, x: a.x, y: a.y, label: a.title, color: a.color ?? ANNOTATION_COLORS[a.kind] })),
       ...(picked ? [{ id: "picked", x: picked.x, y: picked.y, label: picked.name, color: "#ff7a2f" }] : []),
     ];
+
+    /** After rendering the standard overlay, add clickable hit circles on location markers
+     *  so the DM can click a location to see its visit history (Req 21.3). */
+    const addLocationClickTargets = () => {
+      if (!journeyOverlayActive) return;
+      const doc = win.document;
+      const g = doc.getElementById("dm-workbench-overlay") as SVGGElement | null;
+      if (!g) return;
+      const ns = "http://www.w3.org/2000/svg";
+      for (const link of (links.data ?? [])) {
+        if (link.x == null || link.y == null) continue;
+        const hit = doc.createElementNS(ns, "circle");
+        hit.setAttribute("cx", String(link.x));
+        hit.setAttribute("cy", String(link.y));
+        hit.setAttribute("r", "8");
+        hit.setAttribute("fill", "transparent");
+        hit.setAttribute("pointer-events", "all");
+        hit.setAttribute("cursor", "pointer");
+        hit.setAttribute("data-loc-target", link.entity_id);
+        const entityId = link.entity_id;
+        const entityName = places.data?.find((e) => e.id === entityId)?.name ?? link.feature_name ?? "Location";
+        hit.addEventListener("click", (e) => {
+          e.stopPropagation();
+          setSelectedLocationId((prev) => (prev === entityId ? null : entityId));
+          setSelectedLocationName(entityName);
+          setSelectedSegmentId(null);
+        });
+        g.appendChild(hit);
+      }
+    };
+
     renderOverlay(win, points, activeLinkId);
-    const id = setInterval(() => renderOverlay(win, points, activeLinkId), 4000); // survives generator redraws
+    addLocationClickTargets();
+    const id = setInterval(() => { renderOverlay(win, points, activeLinkId); addLocationClickTargets(); }, 4000); // survives generator redraws
     return () => clearInterval(id);
-  }, [win, status, links.data, annotations.data, activeLinkId, picked, places.data]);
+  }, [win, status, links.data, annotations.data, activeLinkId, picked, places.data, journeyOverlayActive]);
+
+  // ── Journey route overlay rendering (Req 9.1, 9.6, 9.10) ──
+  const routeResultRef = useRef<{ unmappedSegments: EnrichedSegment[]; partialSegments: EnrichedSegment[] }>({ unmappedSegments: [], partialSegments: [] });
+  const selectedSegment = useMemo(
+    () => (journeySegments.data ?? []).find((s) => s.id === selectedSegmentId) ?? null,
+    [journeySegments.data, selectedSegmentId],
+  );
+
+  const handlePlaybackVisibleChange = useCallback((visible: EnrichedSegment[], _current: EnrichedSegment | null) => {
+    setPlaybackVisibleSegs(visible);
+  }, []);
+
+  const characterNames = useMemo(() => {
+    const map: Record<string, string> = {};
+    for (const c of characters.data ?? []) {
+      map[c.id] = c.name;
+    }
+    return map;
+  }, [characters.data]);
+
+  // When playback is active, render only the visible subset; otherwise all segments
+  const effectiveSegments = useMemo(() => {
+    if (!journeyOverlayActive || !journeySegments.data) return [];
+    if (playbackActive) return playbackVisibleSegs;
+    return journeySegments.data;
+  }, [journeyOverlayActive, journeySegments.data, playbackActive, playbackVisibleSegs]);
+
+  useEffect(() => {
+    if (!win || status !== "ready") return;
+    const doc = win.document;
+    const overlay = doc.getElementById("dm-workbench-overlay") as SVGGElement | null;
+    if (!overlay) return;
+
+    // Clear routes when overlay is inactive or no data
+    if (!journeyOverlayActive || effectiveSegments.length === 0) {
+      clearRouteOverlay(overlay);
+      routeResultRef.current = { unmappedSegments: [], partialSegments: [] };
+      return;
+    }
+
+    const onSegmentClick = (segmentId: string) => {
+      setSelectedSegmentId((prev) => (prev === segmentId ? null : segmentId));
+      setSelectedLocationId(null);
+    };
+
+    const result = renderRouteOverlay(overlay, effectiveSegments, onSegmentClick);
+    routeResultRef.current = result;
+
+    // Periodic re-render to survive generator redraws (same pattern as existing overlay)
+    const intervalId = setInterval(() => {
+      const g = doc.getElementById("dm-workbench-overlay") as SVGGElement | null;
+      if (g) {
+        renderRouteOverlay(g, effectiveSegments, onSegmentClick);
+      }
+    }, 4000);
+
+    return () => {
+      clearInterval(intervalId);
+      // Clean up route elements if overlay gets deactivated
+      const g = doc.getElementById("dm-workbench-overlay") as SVGGElement | null;
+      if (g) clearRouteOverlay(g);
+    };
+  }, [win, status, journeyOverlayActive, effectiveSegments]);
 
   // /atlas/:mapId?entity=ID zooms to a linked feature. ?link=ID starts pick mode for that location.
   useEffect(() => {
@@ -410,17 +529,19 @@ function MapView({ mapId, active, onDeleted }: { mapId: string; active: boolean;
   const addLink = useAction(
     (input: { feature: FmgFeature; entityId: string }) =>
       repos.worldMaps.linkFeature({ map_id: mapId, feature_type: input.feature.type, feature_id: input.feature.id, feature_name: input.feature.name, x: input.feature.x, y: input.feature.y, entity_id: input.entityId }),
-    { success: (link) => `Linked to ${link.feature_name ?? "feature"}`, invalidate: [qk.worldMap(mapId), ["entities"], ["maps"]], onSuccess: (link) => {
-      setPicked(null);
-      setPickMode(null);
-      setTab("links");
-      setActiveLinkId(link.id);
-      if (link.x !== null && link.y !== null && win) zoomTo(win, link.x, link.y, zoomScaleFor(link.feature_type));
-      if (params.get("link")) {
-        params.delete("link");
-        setParams(params, { replace: true });
+    {
+      success: (link) => `Linked to ${link.feature_name ?? "feature"}`, invalidate: [qk.worldMap(mapId), ["entities"], ["maps"]], onSuccess: (link) => {
+        setPicked(null);
+        setPickMode(null);
+        setTab("links");
+        setActiveLinkId(link.id);
+        if (link.x !== null && link.y !== null && win) zoomTo(win, link.x, link.y, zoomScaleFor(link.feature_type));
+        if (params.get("link")) {
+          params.delete("link");
+          setParams(params, { replace: true });
+        }
       }
-    } },
+    },
   );
   const removeLink = useAction((id: string) => repos.worldMaps.unlinkFeature(id), { invalidate: [qk.worldMap(mapId)] });
   const saveAnnotation = useAction(
@@ -500,6 +621,11 @@ function MapView({ mapId, active, onDeleted }: { mapId: string; active: boolean;
           {map.data.seed && <Badge className="whitespace-nowrap">seed {map.data.seed}</Badge>}
           {map.data.map_asset ? <Badge tone="moss" className="whitespace-nowrap">saved{dirty ? " · unsaved changes" : ""}</Badge> : <Badge tone="gold" className="whitespace-nowrap">not saved</Badge>}
           <div className="flex-1" />
+          <Tooltip content="Toggle journey route overlay on the map">
+            <Button size="sm" variant={journeyOverlayActive ? "primary" : "outline"} onClick={() => { setJourneyOverlayActive((v) => !v); if (journeyOverlayActive) { setSelectedSegmentId(null); setSelectedLocationId(null); setRouteFilters({}); usePlaybackStore.getState().deactivate(); } }} disabled={status !== "ready"}>
+              <Route size={13} /> Journey routes
+            </Button>
+          </Tooltip>
           <Tooltip content="Pick a feature on the map and link it to a location record">
             <Button size="sm" variant={pickMode === "link" ? "primary" : "outline"} onClick={() => { setPickMode(pickMode === "link" ? null : "link"); setPicked(null); }} disabled={status !== "ready"}>
               <Link2 size={13} /> Link feature
@@ -543,7 +669,47 @@ function MapView({ mapId, active, onDeleted }: { mapId: string; active: boolean;
               <div className="rounded-md border border-ember bg-bg-elevated/95 px-3 py-1.5 text-xs">{pickMode === "link" ? "Click a town, state, province or marker. The form opens on the right. Esc to cancel." : "Click anywhere on the map to place an annotation. Esc to cancel."}</div>
             </div>
           )}
+          {/* ── Journey overlay: filter toolbar + legend (Req 9.1, 9.5, 11.1) ── */}
+          {journeyOverlayActive && status === "ready" && (
+            <>
+              <div className="absolute inset-x-0 top-0 z-10 px-3 pt-2">
+                <JourneyFilterToolbar
+                  filters={routeFilters}
+                  onFiltersChange={setRouteFilters}
+                  characters={(characters.data ?? []).map((e) => ({ id: e.id, name: e.name }))}
+                  parties={(parties.data ?? []).map((e) => ({ id: e.id, name: e.name }))}
+                  sessions={(sessions.data ?? []).map((e) => ({ id: e.id, name: e.name }))}
+                  noResults={!!(journeySegments.data && journeySegments.data.length === 0)}
+                />
+              </div>
+              <div className="absolute bottom-3 left-3 z-10 flex flex-col gap-2 max-w-80">
+                <JourneyPlayback
+                  filteredSegments={journeySegments.data ?? []}
+                  onVisibleChange={handlePlaybackVisibleChange}
+                />
+                <RouteLegend
+                  segments={journeySegments.data ?? []}
+                  unmappedCount={routeResultRef.current.unmappedSegments.length}
+                />
+              </div>
+              <RouteComparison
+                segments={journeySegments.data ?? []}
+                selectedCharacterIds={routeFilters.characterIds ?? []}
+                characterNames={characterNames}
+                className="absolute right-3 bottom-3 z-10"
+              />
+            </>
+          )}
         </div>
+        {/* ── Segment detail / location visit history panel (Req 10.1, 21.3) ── */}
+        {journeyOverlayActive && (selectedSegment || selectedLocationId) && (
+          <SegmentDetailPanel
+            segment={selectedSegment}
+            locationId={selectedLocationId}
+            locationName={selectedLocationName}
+            onClose={() => { setSelectedSegmentId(null); setSelectedLocationId(null); }}
+          />
+        )}
       </div>
       <aside className="flex shrink-0 flex-col border-l border-border bg-bg-panel" style={{ width: panelWidth }}>
         <div className="flex border-b border-border text-xs">

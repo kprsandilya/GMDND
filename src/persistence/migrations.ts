@@ -382,6 +382,109 @@ CREATE TABLE IF NOT EXISTS assets (
 ALTER TABLE combatants ADD COLUMN sheet TEXT NOT NULL DEFAULT '{}';
 `,
   },
+  {
+    version: 3,
+    name: "character journeys",
+    sql: `
+-- Party memberships (time-aware)
+CREATE TABLE IF NOT EXISTS party_memberships (
+  id TEXT PRIMARY KEY,
+  party_id TEXT NOT NULL REFERENCES entities(id) ON DELETE CASCADE,
+  entity_id TEXT NOT NULL REFERENCES entities(id) ON DELETE CASCADE,
+  role TEXT NOT NULL DEFAULT '',
+  joined_session_id TEXT REFERENCES entities(id) ON DELETE SET NULL,
+  left_session_id TEXT REFERENCES entities(id) ON DELETE SET NULL,
+  joined_year INTEGER,
+  joined_month INTEGER,
+  joined_day INTEGER,
+  left_year INTEGER,
+  left_month INTEGER,
+  left_day INTEGER,
+  notes TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_memberships_party ON party_memberships(party_id);
+CREATE INDEX IF NOT EXISTS idx_memberships_entity ON party_memberships(entity_id);
+
+-- Journeys
+CREATE TABLE IF NOT EXISTS journeys (
+  id TEXT PRIMARY KEY,
+  campaign_id TEXT NOT NULL REFERENCES entities(id) ON DELETE CASCADE,
+  party_id TEXT REFERENCES entities(id) ON DELETE SET NULL,
+  session_id TEXT REFERENCES entities(id) ON DELETE SET NULL,
+  name TEXT NOT NULL,
+  category TEXT NOT NULL,
+  description TEXT NOT NULL DEFAULT '',
+  dm_notes TEXT NOT NULL DEFAULT '',
+  route_certainty TEXT NOT NULL DEFAULT 'known',
+  start_year INTEGER,
+  start_month INTEGER,
+  start_day INTEGER,
+  end_year INTEGER,
+  end_month INTEGER,
+  end_day INTEGER,
+  sort_order INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_journeys_campaign ON journeys(campaign_id);
+CREATE INDEX IF NOT EXISTS idx_journeys_party ON journeys(party_id);
+CREATE INDEX IF NOT EXISTS idx_journeys_session ON journeys(session_id);
+
+-- Travel segments
+CREATE TABLE IF NOT EXISTS travel_segments (
+  id TEXT PRIMARY KEY,
+  journey_id TEXT NOT NULL REFERENCES journeys(id) ON DELETE CASCADE,
+  origin_entity_id TEXT REFERENCES entities(id) ON DELETE SET NULL,
+  destination_entity_id TEXT REFERENCES entities(id) ON DELETE SET NULL,
+  waypoints TEXT NOT NULL DEFAULT '[]',
+  start_year INTEGER,
+  start_month INTEGER,
+  start_day INTEGER,
+  end_year INTEGER,
+  end_month INTEGER,
+  end_day INTEGER,
+  sort_order INTEGER NOT NULL DEFAULT 0,
+  route_certainty TEXT NOT NULL DEFAULT 'confirmed',
+  notes TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_segments_journey ON travel_segments(journey_id);
+
+-- Segment participants
+CREATE TABLE IF NOT EXISTS segment_participants (
+  id TEXT PRIMARY KEY,
+  segment_id TEXT NOT NULL REFERENCES travel_segments(id) ON DELETE CASCADE,
+  entity_id TEXT NOT NULL REFERENCES entities(id) ON DELETE CASCADE,
+  role TEXT NOT NULL DEFAULT 'traveler',
+  notes TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL,
+  UNIQUE(segment_id, entity_id)
+);
+CREATE INDEX IF NOT EXISTS idx_seg_participants_segment ON segment_participants(segment_id);
+CREATE INDEX IF NOT EXISTS idx_seg_participants_entity ON segment_participants(entity_id);
+
+-- Timeline event participants (multi-character events)
+CREATE TABLE IF NOT EXISTS timeline_event_participants (
+  id TEXT PRIMARY KEY,
+  event_id TEXT NOT NULL REFERENCES timeline_events(id) ON DELETE CASCADE,
+  entity_id TEXT NOT NULL REFERENCES entities(id) ON DELETE CASCADE,
+  role TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL,
+  UNIQUE(event_id, entity_id, role)
+);
+
+-- Extend timeline_events with journey-related columns
+ALTER TABLE timeline_events ADD COLUMN category TEXT NOT NULL DEFAULT 'general';
+ALTER TABLE timeline_events ADD COLUMN session_id TEXT REFERENCES entities(id) ON DELETE SET NULL;
+ALTER TABLE timeline_events ADD COLUMN journey_id TEXT REFERENCES journeys(id) ON DELETE SET NULL;
+ALTER TABLE timeline_events ADD COLUMN segment_id TEXT REFERENCES travel_segments(id) ON DELETE SET NULL;
+ALTER TABLE timeline_events ADD COLUMN location_id TEXT REFERENCES entities(id) ON DELETE SET NULL;
+ALTER TABLE timeline_events ADD COLUMN confidence TEXT NOT NULL DEFAULT 'certain';
+ALTER TABLE timeline_events ADD COLUMN manual_order INTEGER NOT NULL DEFAULT 0;
+`,
+  },
 ];
 
 export const CURRENT_SCHEMA_VERSION = MIGRATIONS[MIGRATIONS.length - 1]!.version;

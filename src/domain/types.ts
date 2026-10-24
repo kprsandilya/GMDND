@@ -29,6 +29,7 @@ export const ENTITY_KINDS = [
   "document",
   "encounter",
   "session",
+  "party",
 ] as const;
 export type EntityKind = (typeof ENTITY_KINDS)[number];
 
@@ -73,6 +74,7 @@ export const KIND_LABELS: Record<EntityKind, string> = {
   document: "Document",
   encounter: "Encounter",
   session: "Session",
+  party: "Party",
 };
 
 export interface Entity {

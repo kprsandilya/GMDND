@@ -4,6 +4,8 @@ import { useRepos } from "@/app/appContext";
 import { EntityWorkspace } from "@/components/EntityWorkspace";
 import { Badge } from "@/components/ui";
 import type { Entity } from "@/domain/types";
+import { DmReferenceTab } from "./DmReferenceTab";
+import { JourneyTimelineTab } from "./JourneyTimelineTab";
 
 export function CharactersPage() {
   return (
@@ -14,7 +16,11 @@ export function CharactersPage() {
       description="Player characters and non-player characters with stats, motives, secrets, relationships and inventories."
       rowMeta={(e) => [e.fields.race, e.fields.class, e.fields.level ? `L${e.fields.level}` : null, e.fields.occupation].filter(Boolean).join(" · ") || e.summary}
       extras={{
-        tabs: [{ value: "tokens", label: "On maps", render: (e) => <TokenRefs entity={e} /> }],
+        tabs: [
+          { value: "tokens", label: "On maps", render: (e) => <TokenRefs entity={e} /> },
+          { value: "journey", label: "Journey & Timeline", render: (e) => <JourneyTimelineTab entity={e} /> },
+          { value: "dmref", label: "DM Reference", render: (e) => <DmReferenceTab entity={e} /> },
+        ],
         banner: (e) => <StatBanner entity={e} />,
       }}
     />
