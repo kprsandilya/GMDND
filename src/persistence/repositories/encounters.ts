@@ -182,6 +182,7 @@ export class EncounterRepository {
       const maxHp = Number(sheet.max_hp ?? sheet.hp ?? 10) || 10;
       const ac = sheet.ac !== undefined ? Number(sheet.ac) : null;
       const dexMod = Math.floor(((Number((sheet.abilities as Record<string, number> | undefined)?.dex) || 10) - 10) / 2);
+      const initiativeMod = Number(sheet.initiative ?? dexMod);
       const legendary = Number(sheet.legendary_actions ?? 0) || 0;
       for (let i = 0; i < participant.count; i++) {
         const baseName = participant.label ?? definition?.name ?? "Combatant";
@@ -195,7 +196,7 @@ export class EncounterRepository {
             token_id: token?.id ?? null,
             name: token?.name && participant.count === 1 ? token.name : name,
             side: participant.side,
-            initiative_mod: dexMod,
+            initiative_mod: Number.isFinite(initiativeMod) ? initiativeMod : dexMod,
             hp,
             max_hp: token?.max_hp ?? maxHp,
             ac,
@@ -217,7 +218,7 @@ export class EncounterRepository {
           token_id: token?.id ?? null,
           name: member.name,
           side: "party",
-          initiative_mod: Math.floor(((Number((sheet.abilities as Record<string, number> | undefined)?.dex) || 10) - 10) / 2),
+          initiative_mod: Number(sheet.initiative ?? Math.floor(((Number((sheet.abilities as Record<string, number> | undefined)?.dex) || 10) - 10) / 2)),
           hp: Number(sheet.hp ?? sheet.max_hp ?? 10),
           max_hp: Number(sheet.max_hp ?? sheet.hp ?? 10),
           ac: sheet.ac !== undefined ? Number(sheet.ac) : null,

@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { addDays, formatDate } from "./calendar";
 import { averageOf, parseDice, roll } from "./dice";
-import { assessEncounter, parseActionBlob, snapshotSheet, writeActionsToSheet } from "./statblock";
+import { normalizeFields } from "./schemas";
+import { actionsFromSheet, assessEncounter, parseActionBlob, snapshotSheet, writeActionsToSheet } from "./statblock";
 import { parseSrdCreatures } from "./srdImport";
 import { chebyshev, crossesWall, diagonal5105, neighbouringRooms, rectWalls, segmentsIntersect } from "./geometry";
 import { checkPreconditions, containerInteractions, resolveInteraction } from "./interactions";
@@ -197,6 +198,22 @@ describe("statblock instances", () => {
     const budget = assessEncounter(100, 4, [2, 2]);
     expect(budget.adjustedXp).toBe(200);
     expect(budget.band).toBe("medium");
+  });
+
+  it("fills official 5e character-sheet fields on PCs and creatures", () => {
+    const pc = normalizeFields("pc", { class: "Fighter", level: 2, weapon1_name: "Longsword", weapon1_atk: "+5", weapon1_damage: "1d8+3 slashing" });
+    expect(pc.background).toBe("");
+    expect(pc.proficiency_bonus).toBe(2);
+    expect(pc.personality_traits).toBe("");
+    expect(pc.spellcasting_class).toBe("");
+    expect(pc.initiative).toBe(0);
+    const creature = normalizeFields("creature", { cr: "1", actions: "Bite. +4 to hit, 1d6+2 piercing" });
+    expect(creature.condition_immunities).toBe("");
+    expect(creature.bonus_actions).toBe("");
+    expect(creature.legendary_resistances).toBe(0);
+    const actions = actionsFromSheet(pc);
+    expect(actions[0]).toMatchObject({ title: "Longsword", toHit: 5 });
+    expect(actions[0]!.dice).toContain("1d8+3");
   });
 
   it("reads a local SRD-shaped JSON array", () => {

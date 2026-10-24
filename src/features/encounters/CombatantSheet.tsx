@@ -99,15 +99,33 @@ export function CombatantSheet({
         </div>
       </div>
 
-      <div className="grid grid-cols-4 gap-1.5">
-        <MiniField label="AC" value={String(sheet.ac ?? c.ac ?? "")} editable={editable} onCommit={(v) => setField("ac", Number(v) || 0)} />
-        <MiniField label="Max HP" value={String(sheet.max_hp ?? sheet.hp ?? c.max_hp)} editable={editable} onCommit={(v) => setField("max_hp", Number(v) || c.max_hp)} />
-        <MiniField label="Speed" value={String(sheet.speed ?? "")} editable={editable} onCommit={(v) => setField("speed", v)} />
-        <MiniField label="CR / lvl" value={String(sheet.cr ?? sheet.level ?? "")} editable={editable} onCommit={(v) => setField(sheet.level !== undefined ? "level" : "cr", v)} />
-      </div>
       <div className="text-[11px] text-ink-muted">
-        {[sheet.size, sheet.type, sheet.alignment].filter(Boolean).join(" · ")}
+        {[sheet.class, sheet.level != null && sheet.level !== "" ? `Level ${sheet.level}` : null, sheet.background, sheet.race, sheet.size, sheet.type, sheet.alignment, sheet.cr != null && sheet.cr !== "" ? `CR ${sheet.cr}` : null]
+          .filter(Boolean)
+          .join(" · ")}
         {sheet.senses ? ` · ${String(sheet.senses)}` : ""}
+      </div>
+
+      <div className="grid grid-cols-3 gap-1.5">
+        <MiniField label="Armor Class" value={String(sheet.ac ?? c.ac ?? "")} editable={editable} onCommit={(v) => setField("ac", Number(v) || 0)} />
+        <MiniField label="Initiative" value={String(sheet.initiative ?? c.initiative_mod ?? "")} editable={editable} onCommit={(v) => setField("initiative", Number(v) || 0)} />
+        <MiniField label="Speed" value={String(sheet.speed ?? "")} editable={editable} onCommit={(v) => setField("speed", v)} />
+      </div>
+      <div className="grid grid-cols-4 gap-1.5">
+        <MiniField label="HP Max" value={String(sheet.max_hp ?? sheet.hp ?? c.max_hp)} editable={editable} onCommit={(v) => setField("max_hp", Number(v) || c.max_hp)} />
+        <MiniField label="Temp HP" value={String(sheet.temp_hp ?? c.temp_hp ?? 0)} editable={editable} onCommit={(v) => setField("temp_hp", Number(v) || 0)} />
+        <MiniField label="Hit Dice" value={String(sheet.hit_dice ?? "")} editable={editable} onCommit={(v) => setField("hit_dice", v)} />
+        <MiniField label="Prof. Bonus" value={String(sheet.proficiency_bonus ?? "")} editable={editable} onCommit={(v) => setField("proficiency_bonus", Number(v) || 0)} />
+      </div>
+      <div className="grid grid-cols-3 gap-1.5">
+        <MiniField label="Passive Perc." value={String(sheet.passive_perception ?? "")} editable={editable} onCommit={(v) => setField("passive_perception", Number(v) || 0)} />
+        <MiniField label="Inspiration" value={sheet.inspiration ? "yes" : ""} editable={editable} onCommit={(v) => setField("inspiration", /^(1|y|yes|true)$/i.test(v.trim()))} />
+        <MiniField
+          label={sheet.cr !== undefined && sheet.cr !== "" ? "Challenge" : "XP"}
+          value={String(sheet.cr ?? sheet.xp ?? "")}
+          editable={editable}
+          onCommit={(v) => setField(sheet.cr !== undefined ? "cr" : "xp", sheet.cr !== undefined ? v : Number(v) || 0)}
+        />
       </div>
 
       <div className="grid grid-cols-6 gap-1">
@@ -147,9 +165,9 @@ export function CombatantSheet({
         </div>
       )}
 
-      {["traits", "resistances", "immunities", "saves", "skills"].map((key) =>
-        sheet[key] || editable ? (
-          <BlobField key={key} label={key} value={String(sheet[key] ?? "")} editable={editable} onCommit={(v) => setField(key, v)} />
+      {["saves", "save_proficiencies", "skills", "skill_proficiencies", "other_proficiencies", "languages", "traits", "vulnerabilities", "resistances", "immunities", "condition_immunities"].map((key) =>
+        sheet[key] ? (
+          <BlobField key={key} label={key.replace(/_/g, " ")} value={String(sheet[key] ?? "")} editable={editable} onCommit={(v) => setField(key, v)} />
         ) : null,
       )}
 
@@ -260,7 +278,36 @@ export function CombatantSheet({
         )}
       </div>
 
-      {(sheet.reactions || editable) && <BlobField label="reactions" value={String(sheet.reactions ?? "")} editable={editable} onCommit={(v) => setField("reactions", v)} />}
+      {sheet.bonus_actions ? <BlobField label="bonus actions" value={String(sheet.bonus_actions)} editable={editable} onCommit={(v) => setField("bonus_actions", v)} /> : null}
+      {Boolean(sheet.reactions || editable) && <BlobField label="reactions" value={String(sheet.reactions ?? "")} editable={editable} onCommit={(v) => setField("reactions", v)} />}
+      {Boolean(sheet.features || sheet.additional_features) && (
+        <>
+          {sheet.features ? <BlobField label="features & traits" value={String(sheet.features)} editable={editable} onCommit={(v) => setField("features", v)} /> : null}
+          {sheet.additional_features ? <BlobField label="additional features" value={String(sheet.additional_features)} editable={editable} onCommit={(v) => setField("additional_features", v)} /> : null}
+        </>
+      )}
+      {Boolean(sheet.spellcasting_class || sheet.spells) && (
+        <div className="space-y-1.5">
+          <div className="label">Spellcasting</div>
+          <div className="grid grid-cols-2 gap-1.5">
+            <MiniField label="Class" value={String(sheet.spellcasting_class ?? "")} editable={editable} onCommit={(v) => setField("spellcasting_class", v)} />
+            <MiniField label="Ability" value={String(sheet.spellcasting_ability ?? "")} editable={editable} onCommit={(v) => setField("spellcasting_ability", v)} />
+            <MiniField label="Save DC" value={String(sheet.spell_save_dc ?? "")} editable={editable} onCommit={(v) => setField("spell_save_dc", Number(v) || 0)} />
+            <MiniField label="Spell atk" value={String(sheet.spell_attack_bonus ?? "")} editable={editable} onCommit={(v) => setField("spell_attack_bonus", Number(v) || 0)} />
+          </div>
+          <MiniField label="Slots" value={String(sheet.spell_slots ?? "")} editable={editable} onCommit={(v) => setField("spell_slots", v)} />
+          <BlobField label="spells" value={String(sheet.spells ?? "")} editable={editable} onCommit={(v) => setField("spells", v)} />
+        </div>
+      )}
+      {Boolean(sheet.personality_traits || sheet.ideals || sheet.bonds || sheet.flaws) && (
+        <div className="space-y-1.5">
+          <div className="label">Personality</div>
+          <BlobField label="personality traits" value={String(sheet.personality_traits ?? "")} editable={editable} onCommit={(v) => setField("personality_traits", v)} />
+          <BlobField label="ideals" value={String(sheet.ideals ?? "")} editable={editable} onCommit={(v) => setField("ideals", v)} />
+          <BlobField label="bonds" value={String(sheet.bonds ?? "")} editable={editable} onCommit={(v) => setField("bonds", v)} />
+          <BlobField label="flaws" value={String(sheet.flaws ?? "")} editable={editable} onCommit={(v) => setField("flaws", v)} />
+        </div>
+      )}
       {(sheet.legendary || legendaryMax > 0 || editable) && (
         <div>
           <BlobField label="legendary" value={String(sheet.legendary ?? "")} editable={editable} onCommit={(v) => setField("legendary", v)} />

@@ -35,6 +35,29 @@ function toHitBonus(text: string): number | null {
   return Number(match[1]!.replace(/\s+/g, ""));
 }
 
+function parseAttackBonus(value: unknown): number | null {
+  if (value === null || value === undefined || value === "") return null;
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  const text = String(value).trim();
+  const hit = toHitBonus(text);
+  if (hit !== null) return hit;
+  const bare = /^([+-]?\d+)$/.exec(text);
+  return bare ? Number(bare[1]) : null;
+}
+
+function weaponsFromSheet(sheet: Record<string, unknown>): ParsedAction[] {
+  const out: ParsedAction[] = [];
+  for (const n of [1, 2, 3] as const) {
+    const name = String(sheet[`weapon${n}_name`] ?? "").trim();
+    if (!name) continue;
+    const atk = String(sheet[`weapon${n}_atk`] ?? "").trim();
+    const damage = String(sheet[`weapon${n}_damage`] ?? "").trim();
+    const body = [name, atk && `${atk} to hit`, damage].filter(Boolean).join(". ");
+    out.push({ title: name, body, dice: findDiceExpressions(damage), toHit: parseAttackBonus(atk) });
+  }
+  return out;
+}
+
 export function parseActionBlob(text: string): ParsedAction[] {
   if (!text?.trim()) return [];
   return text
@@ -64,7 +87,9 @@ export function actionsFromSheet(sheet: Record<string, unknown>): ParsedAction[]
       .filter((x): x is ParsedAction => !!x);
   }
   const blob = [sheet.actions, sheet.attacks].filter((x) => typeof x === "string" && x.trim()).join("\n\n");
-  return parseActionBlob(blob);
+  const parsed = parseActionBlob(blob);
+  const weapons = weaponsFromSheet(sheet).filter((w) => !parsed.some((a) => a.title.toLowerCase() === w.title.toLowerCase()));
+  return [...weapons, ...parsed];
 }
 
 export function writeActionsToSheet(sheet: Record<string, unknown>, actions: ParsedAction[]): Record<string, unknown> {

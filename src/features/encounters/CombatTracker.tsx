@@ -367,7 +367,7 @@ function AddCombatantDialog({ open, onOpenChange, runId, onDone }: { open: boole
         hp: max,
         max_hp: max,
         ac: sheet.ac !== undefined ? Number(sheet.ac) : null,
-        initiative_mod: Math.floor(((Number((sheet.abilities as Record<string, number> | undefined)?.dex ?? 10) || 10) - 10) / 2),
+        initiative_mod: Number(sheet.initiative ?? Math.floor(((Number((sheet.abilities as Record<string, number> | undefined)?.dex ?? 10) || 10) - 10) / 2)),
         resources: legendary ? { legendary, legendary_max: legendary } : {},
         sheet,
       });
