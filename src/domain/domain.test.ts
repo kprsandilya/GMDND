@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { addDays, formatDate } from "./calendar";
 import { averageOf, parseDice, roll } from "./dice";
+import { assessEncounter, parseActionBlob, snapshotSheet, writeActionsToSheet } from "./statblock";
+import { parseSrdCreatures } from "./srdImport";
 import { chebyshev, crossesWall, diagonal5105, neighbouringRooms, rectWalls, segmentsIntersect } from "./geometry";
 import { checkPreconditions, containerInteractions, resolveInteraction } from "./interactions";
 import { extractWikiLinks, rewriteWikiLinks } from "./markdown";
@@ -166,5 +168,43 @@ describe("dice, calendar, markdown, undo", () => {
     await stack.redo();
     expect(value).toBe(2);
     expect(stack.canRedo).toBe(false);
+  });
+});
+
+describe("statblock instances", () => {
+  it("parses titled actions and dice from a blob", () => {
+    const parsed = parseActionBlob("Reed Knife. Melee Weapon Attack: +3 to hit, reach 5 ft. Hit: 4 (1d4+1) slashing.\n\nStaff. Hit: 3 (1d6) bludgeoning.");
+    expect(parsed).toHaveLength(2);
+    expect(parsed[0]!.title).toMatch(/Reed Knife/);
+    expect(parsed[0]!.toHit).toBe(3);
+    expect(parsed[0]!.dice).toContain("1d4+1");
+    expect(parsed[1]!.dice).toContain("1d6");
+  });
+
+  it("snapshots independently so edits do not alias the template", () => {
+    const entity = { fields: { actions: "Bite. 1d6", ac: 12 } } as { fields: Record<string, unknown> };
+    const a = snapshotSheet(entity);
+    const b = snapshotSheet(entity);
+    a.ac = 18;
+    expect(b.ac).toBe(12);
+    expect(entity.fields.ac).toBe(12);
+    const next = writeActionsToSheet(a, [{ title: "Claw", body: "Claw. 1d4", dice: ["1d4"], toHit: null }]);
+    expect(String(next.actions)).toMatch(/Claw/);
+    expect(entity.fields.actions).toBe("Bite. 1d6");
+  });
+
+  it("rates four CR 1/8 cultists against two level-2 PCs as medium", () => {
+    const budget = assessEncounter(100, 4, [2, 2]);
+    expect(budget.adjustedXp).toBe(200);
+    expect(budget.band).toBe("medium");
+  });
+
+  it("reads a local SRD-shaped JSON array", () => {
+    const creatures = parseSrdCreatures({
+      monsters: [{ name: "Goblin", challenge_rating: "1/4", xp: 50, armor_class: 15, hit_points: 7, actions: [{ name: "Scimitar", desc: "+4 to hit, 1d6+2 slashing" }] }],
+    });
+    expect(creatures).toHaveLength(1);
+    expect(creatures[0]!.fields.ac).toBe(15);
+    expect(String(creatures[0]!.fields.actions)).toMatch(/Scimitar/);
   });
 });

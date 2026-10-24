@@ -1,6 +1,7 @@
 import type { Repositories } from "@/persistence/repositories";
 import type { Combatant, EncounterOutcomes, EncounterRun, Entity } from "../types";
 import { fireMarkers, objectOwner } from "./interactionWorkflow";
+import { syncRoomLootMarker } from "./lootMarker";
 
 export interface ActivateOptions {
   campaign_id: string;
@@ -143,6 +144,7 @@ export async function finishEncounter(repos: Repositories, runId: string, status
       const hoard = await repos.inventory.listByOwner({ owner_type: "hoard", owner_id: run.encounter_id });
       if (hoard.length && run.room_id) {
         for (const item of hoard) await repos.inventory.transfer({ instance_id: item.id, to: { owner_type: "room", owner_id: run.room_id }, note: "encounter treasure" });
+        await syncRoomLootMarker(repos, run.room_id);
         applied.push(`${hoard.length} treasure item(s) dropped in the room`);
         await log(`Treasure left in the room: ${hoard.map((h) => `${h.quantity}× ${h.definition.name}`).join(", ")}.`, { room_id: run.room_id });
       }

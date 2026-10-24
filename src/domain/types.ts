@@ -493,6 +493,8 @@ export interface Combatant {
   defeated: boolean;
   notes: string;
   sort_order: number;
+  /** Deep copy of the creature/PC fields for this instance. Never written back to the catalog entity. */
+  sheet: Record<string, unknown>;
 }
 
 export interface QuestObjective {

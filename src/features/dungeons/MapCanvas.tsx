@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { platform } from "@/app/platform";
 import { useAppStore } from "@/app/appStore";
 import { doorSegment, normalizeRect, rectsIntersect, type Point, type Rect } from "@/domain/geometry";
 import { reachableCells } from "@/domain/movement";
 import type { Door, MapMarker, MapObject, Room, Token, WallSegment } from "@/domain/types";
+import { ROOM_LOOT_REF } from "@/domain/workflows/lootMarker";
 import { cn } from "@/lib/utils";
 import { CELL, selectedOfType, useEditor, type Selection } from "./editorStore";
 
@@ -57,7 +59,25 @@ export function MapCanvas({ play }: { play: PlayHandlers | null }) {
   const svgRef = useRef<SVGSVGElement>(null);
   const [drag, setDrag] = useState<Drag | null>(null);
   const [spaceDown, setSpaceDown] = useState(false);
+  const [bgUrl, setBgUrl] = useState<string | null>(null);
   const scale = CELL * zoom;
+
+  useEffect(() => {
+    const rel = data?.floor.background_asset;
+    if (!rel) {
+      setBgUrl(null);
+      return;
+    }
+    let cancelled = false;
+    void platform.assetUrl(rel).then((url) => {
+      if (!cancelled) setBgUrl(url);
+    }).catch(() => {
+      if (!cancelled) setBgUrl(null);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [data?.floor.background_asset]);
 
   const toWorld = useCallback(
     (e: { clientX: number; clientY: number }): Point => {
@@ -390,6 +410,7 @@ export function MapCanvas({ play }: { play: PlayHandlers | null }) {
       <g transform={`translate(${pan.x} ${pan.y}) scale(${scale})`}>
         {/* floor background */}
         <rect x={0} y={0} width={W} height={H} fill="#1a1612" stroke="#3a322c" strokeWidth={0.05} />
+        {layers.image && bgUrl && <image href={bgUrl} x={0} y={0} width={W} height={H} preserveAspectRatio="xMidYMid slice" opacity={0.85} />}
         {/* rooms */}
         {layers.rooms &&
           data.rooms.map((room) => {
@@ -457,6 +478,10 @@ export function MapCanvas({ play }: { play: PlayHandlers | null }) {
         {/* markers */}
         {layers.markers &&
           data.markers.map((m) => {
+            if (mode === "play" && !m.dm_only && m.kind === "treasure" && m.trigger_ref === ROOM_LOOT_REF) {
+              const room = data.rooms.find((r) => r.id === m.room_id);
+              if (room && !room.state.explored) return null;
+            }
             const o = offsetFor(m.id);
             return <MarkerGlyph key={m.id} marker={{ ...m, x: m.x + o.x, y: m.y + o.y }} selected={isSelected(m.id)} showLabel={layers.labels} />;
           })}

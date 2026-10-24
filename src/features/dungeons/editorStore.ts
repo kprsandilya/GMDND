@@ -27,6 +27,7 @@ export interface Layers {
   labels: boolean;
   hidden: boolean; // show hidden/undiscovered elements (DM view)
   reach: boolean; // reachable cells overlay in play mode
+  image: boolean; // battle-map image under the grid
 }
 
 export const CELL = 40;
@@ -91,7 +92,7 @@ interface EditorState {
   updateFloor: (patch: Partial<DungeonFloor>) => Promise<void>;
 }
 
-const DEFAULT_LAYERS: Layers = { grid: true, rooms: true, walls: true, doors: true, objects: true, tokens: true, markers: true, labels: true, hidden: true, reach: true };
+const DEFAULT_LAYERS: Layers = { grid: true, rooms: true, walls: true, doors: true, objects: true, tokens: true, markers: true, labels: true, hidden: true, reach: true, image: true };
 
 const ROOM_COLORS = ["#6b5b3e", "#4f5f6b", "#5e4f6b", "#4b6b55", "#6b4f4f", "#5f6b4f"];
 

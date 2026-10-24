@@ -1,14 +1,17 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Plus, Swords, Trash2 } from "lucide-react";
+import { Plus, Swords, Trash2, Upload } from "lucide-react";
 import { useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router";
 import { toast } from "sonner";
 import { useRepos } from "@/app/appContext";
 import { useAppStore } from "@/app/appStore";
-import { qk, useAction, useRequiredCampaignId } from "@/app/queries";
+import { qk, useAction, useEntities, useRequiredCampaignId } from "@/app/queries";
 import { EntityPicker } from "@/components/EntityPicker";
 import { EntityWorkspace } from "@/components/EntityWorkspace";
+import { InventoryPanel } from "@/components/InventoryPanel";
 import { Badge, Button, Dialog, Field, Input, Select } from "@/components/ui";
+import { assessEncounter } from "@/domain/statblock";
+import { creatureInputs, parseSrdCreatures } from "@/domain/srdImport";
 import type { EncounterParticipant, EncounterSide, Entity } from "@/domain/types";
 import { activateEncounter } from "@/domain/workflows/encounterWorkflow";
 import { errorMessage, formatDateTime } from "@/lib/utils";
@@ -29,6 +32,7 @@ export function EncountersPage() {
         banner: (e) => (runId ? <CombatTracker runId={runId} encounter={e} /> : <RunBar encounter={e} />),
         tabs: [
           { value: "participants", label: "Participants", render: (e) => <Participants encounter={e} /> },
+          { value: "prep", label: "Prep", render: (e) => <PrepPanel encounter={e} /> },
           { value: "runs", label: "Runs", render: (e) => <RunsForEncounter encounter={e} /> },
         ],
       }}
@@ -118,6 +122,7 @@ const SIDES: EncounterSide[] = ["enemy", "ally", "neutral", "party"];
 
 function Participants({ encounter }: { encounter: Entity }) {
   const repos = useRepos();
+  const qc = useQueryClient();
   const list = useQuery({ queryKey: qk.participants(encounter.id), queryFn: () => repos.encounters.participants(encounter.id) });
   const entities = useQuery({
     queryKey: ["entities", "many", (list.data ?? []).map((p) => p.entity_id)],
@@ -132,7 +137,15 @@ function Participants({ encounter }: { encounter: Entity }) {
   const update = useAction(({ id, patch }: { id: string; patch: Partial<EncounterParticipant> }) => repos.encounters.updateParticipant(id, patch), { invalidate });
   const remove = useAction((id: string) => repos.encounters.removeParticipant(id), { invalidate });
   const name = (p: EncounterParticipant) => p.label ?? entities.data?.find((e) => e.id === p.entity_id)?.name ?? "Unnamed";
+  const party = useEntities({ kinds: ["pc"] });
+  const [importing, setImporting] = useState(false);
   const totalXp = (list.data ?? []).reduce((sum, p) => sum + p.count * Number(entities.data?.find((e) => e.id === p.entity_id)?.fields.xp ?? 0), 0);
+  const monsterCount = (list.data ?? []).filter((p) => p.side === "enemy").reduce((s, p) => s + p.count, 0);
+  const budget = assessEncounter(
+    totalXp,
+    monsterCount,
+    (party.data ?? []).map((p) => Number(p.fields.level ?? 1) || 1),
+  );
   return (
     <div className="space-y-3">
       <ul className="divide-y divide-border rounded border border-border">
@@ -181,7 +194,69 @@ function Participants({ encounter }: { encounter: Entity }) {
           <Plus size={13} /> Add
         </Button>
       </div>
-      <div className="text-[12px] text-ink-faint">Total XP from templates: {totalXp}</div>
+      <div className="rounded border border-border bg-bg-elevated p-2 text-[12px]">
+        <div className="font-semibold text-ember-soft">Difficulty vs this campaign’s party (2014 XP)</div>
+        <div className="mt-1 text-ink-muted">
+          Monster XP {budget.monsterXp} × {budget.multiplier} = <span className="text-ink">{budget.adjustedXp} adjusted</span>
+          {" · "}
+          Party budget easy {budget.party.easy} / med {budget.party.medium} / hard {budget.party.hard} / deadly {budget.party.deadly}
+        </div>
+        <Badge tone={budget.band === "deadly" ? "blood" : budget.band === "hard" ? "ember" : budget.band === "easy" || budget.band === "trivial" ? "moss" : "gold"} className="mt-1">
+          {budget.band}
+        </Badge>
+        <p className="mt-1 text-[11px] text-ink-faint">Catalog XP only. Changing a combatant mid-fight does not rewrite this template.</p>
+      </div>
+      <div className="flex items-center gap-2 text-[12px]">
+        <Button size="sm" variant="outline" disabled={importing} onClick={() => void importSrd()}>
+          <Upload size={12} /> Import SRD JSON into Creatures
+        </Button>
+        <span className="text-ink-faint">Local file only — pick a monster array, then add them from the picker above.</span>
+      </div>
+    </div>
+  );
+
+  async function importSrd() {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = "application/json,.json";
+    input.onchange = async () => {
+      const file = input.files?.[0];
+      if (!file) return;
+      setImporting(true);
+      try {
+        const json = JSON.parse(await file.text()) as unknown;
+        const parsed = parseSrdCreatures(json);
+        if (parsed.length === 0) {
+          toast.error("No creatures found in that file.");
+          return;
+        }
+        const campaignId = encounter.campaign_id;
+        if (!campaignId) throw new Error("Encounter is not in a campaign.");
+        for (const row of creatureInputs(campaignId, parsed)) await repos.entities.create(row);
+        toast.success(`Imported ${parsed.length} creature(s) into the catalog.`);
+        void qc.invalidateQueries({ queryKey: ["entities"] });
+      } catch (e) {
+        toast.error(errorMessage(e));
+      } finally {
+        setImporting(false);
+      }
+    };
+    input.click();
+  }
+}
+
+function PrepPanel({ encounter }: { encounter: Entity }) {
+  const fields = encounter.fields as Record<string, unknown>;
+  return (
+    <div className="space-y-4">
+      <div className="rounded border border-border p-3 text-[12.5px]">
+        <div className="label">Tactics & outcomes</div>
+        <p className="text-ink-muted">{encounter.body_md || "Write tactics in the encounter record body."}</p>
+        {fields.reinforcements ? <p className="mt-2"><span className="text-ink-faint">Reinforcements: </span>{String(fields.reinforcements)}</p> : null}
+        {fields.treasure ? <p className="mt-1"><span className="text-ink-faint">Treasure notes: </span>{String(fields.treasure)}</p> : null}
+        {fields.alternative_outcomes ? <p className="mt-1"><span className="text-ink-faint">If they flee / parley: </span>{String(fields.alternative_outcomes)}</p> : null}
+      </div>
+      <InventoryPanel owner={{ owner_type: "hoard", owner_id: encounter.id }} title="Treasure hoard (dropped to the room when the run awards treasure)" />
     </div>
   );
 }

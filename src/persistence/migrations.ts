@@ -375,6 +375,13 @@ CREATE TABLE IF NOT EXISTS assets (
 );
 `,
   },
+  {
+    version: 2,
+    name: "combatant instance sheets",
+    sql: `
+ALTER TABLE combatants ADD COLUMN sheet TEXT NOT NULL DEFAULT '{}';
+`,
+  },
 ];
 
 export const CURRENT_SCHEMA_VERSION = MIGRATIONS[MIGRATIONS.length - 1]!.version;

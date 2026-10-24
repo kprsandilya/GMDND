@@ -4,6 +4,7 @@ import { resetDemoCampaign, seedDemoCampaign } from "@/seed/demoCampaign";
 import { advanceCampaignDate, createCampaign, loadCampaignState, promoteNote, setPartyLocation } from "./campaignWorkflow";
 import { activateEncounter, finishEncounter } from "./encounterWorkflow";
 import { moveToken, performDoorAction, performInteraction, tokenOwner } from "./interactionWorkflow";
+import { ROOM_LOOT_REF, syncRoomLootMarker } from "./lootMarker";
 
 describe("demo campaign workflow", () => {
   it("moves a character into the reliquary, finds the key, opens the chest and keeps the loot", async () => {
@@ -148,6 +149,76 @@ describe("demo campaign workflow", () => {
     const runs = await repos.encounters.runsForEncounter(ambush.id);
     expect(runs).toHaveLength(1);
     expect(runs[0]!.log.length).toBeGreaterThan(5);
+
+    const lootMarkers = (await repos.dungeons.markers(ids.floor)).filter((m) => m.trigger_ref === ROOM_LOOT_REF && m.room_id === ids.rooms.guard);
+    expect(lootMarkers).toHaveLength(1);
+    expect(lootMarkers[0]!.kind).toBe("treasure");
+    expect(lootMarkers[0]!.body_md).toMatch(/Drowned Choir Medallion/);
+  });
+
+  it("gives each spawned enemy its own sheet and never writes edits back to the creature", async () => {
+    const { repos } = await testRepos();
+    const ids = await seedDemoCampaign(repos);
+    const ambush = (await repos.entities.list({ campaign_id: ids.campaign, kinds: ["encounter"] })).find((e) => e.name === "Guard Post Ambush")!;
+    const cultist = (await repos.entities.list({ campaign_id: ids.campaign, kinds: ["creature"] })).find((e) => e.name === "Fen Cultist")!;
+    const before = JSON.stringify(cultist.fields);
+    const { combatants } = await activateEncounter(repos, { campaign_id: ids.campaign, encounter_id: ambush.id, room_id: ids.rooms.guard!, floor_id: ids.floor });
+    const copies = combatants.filter((c) => c.name.startsWith("Fen Cultist"));
+    expect(copies).toHaveLength(3);
+    expect(copies.every((c) => String(c.sheet.actions ?? "").includes("Reed Knife"))).toBe(true);
+    copies[1]!.sheet = { ...copies[1]!.sheet, actions: "Broken bottle. 1d4", ac: 9 };
+    await repos.encounters.updateCombatant(copies[1]!.id, { sheet: copies[1]!.sheet, ac: 9 });
+    const one = await repos.encounters.getCombatant(copies[0]!.id);
+    const two = await repos.encounters.getCombatant(copies[1]!.id);
+    expect(String(one.sheet.actions)).toMatch(/Reed Knife/);
+    expect(String(two.sheet.actions)).toMatch(/Broken bottle/);
+    expect(two.ac).toBe(9);
+    expect(one.ac).toBe(12);
+    expect(JSON.stringify((await repos.entities.get(cultist.id)).fields)).toBe(before);
+  });
+
+  it("starts death saves for a PC at 0 HP instead of marking them defeated", async () => {
+    const { repos } = await testRepos();
+    const ids = await seedDemoCampaign(repos);
+    const ambush = (await repos.entities.list({ campaign_id: ids.campaign, kinds: ["encounter"] })).find((e) => e.name === "Guard Post Ambush")!;
+    const { combatants } = await activateEncounter(repos, { campaign_id: ids.campaign, encounter_id: ambush.id });
+    const nyx = combatants.find((c) => c.name.includes("Nyx"))!;
+    await repos.encounters.damage(nyx.id, 200);
+    const down = await repos.encounters.getCombatant(nyx.id);
+    expect(down.hp).toBe(0);
+    expect(down.defeated).toBe(false);
+    expect(down.conditions.map((c) => c.name)).toContain("unconscious");
+    await repos.encounters.rollDeathSave(nyx.id, 4);
+    await repos.encounters.rollDeathSave(nyx.id, 3);
+    const dead = await repos.encounters.rollDeathSave(nyx.id, 2);
+    expect(dead.defeated).toBe(true);
+    expect(dead.resources.death_fail).toBeGreaterThanOrEqual(3);
+  });
+
+  it("updates one auto loot marker and leaves a DM treasure marker alone", async () => {
+    const { repos } = await testRepos();
+    const ids = await seedDemoCampaign(repos);
+    const gold = (await repos.entities.list({ campaign_id: ids.campaign, kinds: ["item"] })).find((e) => e.name === "Gold Pieces")!;
+    await repos.inventory.grant(ids.campaign, gold.id, 5, { owner_type: "room", owner_id: ids.rooms.guard! });
+    const first = await syncRoomLootMarker(repos, ids.rooms.guard!);
+    const second = await syncRoomLootMarker(repos, ids.rooms.guard!);
+    expect(first?.id).toBe(second?.id);
+    expect((await repos.dungeons.markers(ids.floor)).filter((m) => m.trigger_ref === ROOM_LOOT_REF && m.room_id === ids.rooms.guard)).toHaveLength(1);
+    const authored = await repos.dungeons.createMarker({
+      floor_id: ids.floor,
+      room_id: ids.rooms.guard!,
+      kind: "treasure",
+      title: "Hidden cache",
+      x: 16,
+      y: 12,
+      trigger: "manual",
+      dm_only: true,
+    });
+    const leftover = await repos.inventory.listByOwner({ owner_type: "room", owner_id: ids.rooms.guard! });
+    for (const item of leftover) await repos.inventory.transfer({ instance_id: item.id, to: { owner_type: "unassigned", owner_id: null } });
+    await syncRoomLootMarker(repos, ids.rooms.guard!);
+    expect((await repos.dungeons.markers(ids.floor)).filter((m) => m.trigger_ref === ROOM_LOOT_REF && m.room_id === ids.rooms.guard)).toHaveLength(0);
+    expect((await repos.dungeons.markers(ids.floor)).some((m) => m.id === authored.id)).toBe(true);
   });
 
   it("starts a run even when the stored session or map ids are gone", async () => {
