@@ -7,6 +7,7 @@ import { DungeonsPage } from "@/features/dungeons/DungeonsPage";
 import { EncountersPage } from "@/features/encounters/EncountersPage";
 import { ItemsPage } from "@/features/items/ItemsPage";
 import { PartiesPage } from "@/features/parties/PartiesPage";
+import { JourneysPage } from "@/features/journeys/JourneysPage";
 import { LocationsPage } from "@/features/locations/LocationsPage";
 import { LorePage } from "@/features/lore/LorePage";
 import { QuestsPage } from "@/features/quests/QuestsPage";
@@ -34,6 +35,8 @@ export function AppRoutes() {
         <Route path="characters/:id" element={<CharactersPage />} />
         <Route path="parties" element={<PartiesPage />} />
         <Route path="parties/:id" element={<PartiesPage />} />
+        <Route path="journeys" element={<JourneysPage />} />
+        <Route path="journeys/:id" element={<JourneysPage />} />
         <Route path="items" element={<ItemsPage />} />
         <Route path="items/:id" element={<ItemsPage />} />
         <Route path="creatures" element={<CreaturesPage />} />

@@ -1367,6 +1367,60 @@ export class JourneyRepository {
     return this.characterTravelHistory(entityId);
   }
 
+  /** Returns all enriched segments for a specific journey (not filtered by participant). */
+  async enrichedSegmentsForJourney(journeyId: string): Promise<EnrichedSegment[]> {
+    const journeyRows = await this.db.select("SELECT * FROM journeys WHERE id = ?", [journeyId]);
+    if (journeyRows.length === 0) return [];
+    const journey = mapJourney(journeyRows[0]);
+
+    const segmentRows = await this.db.select(
+      "SELECT * FROM travel_segments WHERE journey_id = ? ORDER BY sort_order, created_at",
+      [journeyId],
+    );
+
+    const results: EnrichedSegment[] = [];
+    for (const row of segmentRows) {
+      const segment = mapSegment(row);
+
+      const participantRows = await this.db.select(
+        `SELECT sp.*, e.name AS entity_name FROM segment_participants sp JOIN entities e ON e.id = sp.entity_id WHERE sp.segment_id = ? ORDER BY sp.created_at`,
+        [segment.id],
+      );
+      const participants = participantRows.map((pr) => ({ ...mapParticipant(pr), entity_name: text(pr.entity_name) }));
+
+      const originName = segment.origin_entity_id
+        ? str((await this.db.select("SELECT name FROM entities WHERE id = ?", [segment.origin_entity_id]))[0]?.name)
+        : null;
+      const destinationName = segment.destination_entity_id
+        ? str((await this.db.select("SELECT name FROM entities WHERE id = ?", [segment.destination_entity_id]))[0]?.name)
+        : null;
+
+      let originCoords: { x: number; y: number } | null = null;
+      let destinationCoords: { x: number; y: number } | null = null;
+      if (segment.origin_entity_id) originCoords = await this.lookupCoordsAnyMap(segment.origin_entity_id);
+      if (segment.destination_entity_id) destinationCoords = await this.lookupCoordsAnyMap(segment.destination_entity_id);
+
+      const waypointCoords: ({ x: number; y: number } | null)[] = [];
+      for (const wp of segment.waypoints) {
+        if (wp.x != null && wp.y != null) waypointCoords.push({ x: wp.x, y: wp.y });
+        else if (wp.entity_id) waypointCoords.push(await this.lookupCoordsAnyMap(wp.entity_id));
+        else waypointCoords.push(null);
+      }
+
+      results.push({
+        ...segment,
+        journey,
+        participants,
+        origin_name: originName,
+        destination_name: destinationName,
+        origin_coords: originCoords,
+        destination_coords: destinationCoords,
+        waypoint_coords: waypointCoords,
+      });
+    }
+    return results;
+  }
+
   /** Alias for locationVisitHistory, per design interface. */
   async segmentsForLocation(entityId: string): Promise<EnrichedSegment[]> {
     return this.locationVisitHistory(entityId);
