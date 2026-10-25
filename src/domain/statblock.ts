@@ -189,6 +189,77 @@ export function assessEncounter(monsterXp: number, monsterCount: number, partyLe
   return { monsterXp, adjustedXp, multiplier, party, band };
 }
 
+/** 2024 DMG XP budget per character level: low, moderate, high. */
+export const XP_BUDGET_2024: Record<number, [number, number, number]> = {
+  1: [50, 75, 100],
+  2: [100, 150, 200],
+  3: [150, 225, 400],
+  4: [250, 375, 500],
+  5: [500, 750, 1100],
+  6: [600, 1000, 1400],
+  7: [750, 1300, 1700],
+  8: [1000, 1700, 2100],
+  9: [1300, 2000, 2600],
+  10: [1600, 2300, 3100],
+  11: [1900, 2900, 4100],
+  12: [2200, 3700, 4700],
+  13: [2600, 4200, 5400],
+  14: [2900, 4900, 6200],
+  15: [3300, 5400, 7800],
+  16: [3800, 6100, 9800],
+  17: [4500, 7200, 11700],
+  18: [5000, 8700, 14200],
+  19: [5500, 10700, 17200],
+  20: [6400, 13200, 22000],
+};
+
+export type BudgetRules = "2014" | "2024";
+
+/**
+ * 2024 rules: no group multiplier. Low/moderate/high map onto easy/medium/hard; anything past 1.5× the
+ * high budget is labelled deadly so both rule sets share one difficulty scale.
+ */
+export function assessEncounter2024(monsterXp: number, partyLevels: number[]): EncounterBudget {
+  const party = { easy: 0, medium: 0, hard: 0, deadly: 0 };
+  for (const raw of partyLevels) {
+    const level = Math.max(1, Math.min(20, Math.round(raw) || 1));
+    const [low, moderate, high] = XP_BUDGET_2024[level]!;
+    party.easy += low;
+    party.medium += moderate;
+    party.hard += high;
+  }
+  party.deadly = Math.floor(party.hard * 1.5);
+  let band: EncounterBand = "trivial";
+  if (party.deadly > 0 && monsterXp >= party.deadly) band = "deadly";
+  else if (party.hard > 0 && monsterXp >= party.hard) band = "hard";
+  else if (party.medium > 0 && monsterXp >= party.medium) band = "medium";
+  else if (party.easy > 0 && monsterXp >= party.easy) band = "easy";
+  return { monsterXp, adjustedXp: monsterXp, multiplier: 1, party, band };
+}
+
+export function assessWithRules(rules: BudgetRules, monsterXp: number, monsterCount: number, partyLevels: number[]): EncounterBudget {
+  return rules === "2024" ? assessEncounter2024(monsterXp, partyLevels) : assessEncounter(monsterXp, monsterCount, partyLevels);
+}
+
+export interface MoraleState {
+  /** Share of the enemy side's combined max HP still standing, 0–1. */
+  hpFraction: number;
+  standing: number;
+  total: number;
+  broken: boolean;
+}
+
+/** Enemy morale: broken once the standing enemies' HP falls to the template's flee threshold. */
+export function enemyMorale(combatants: { side: string; hp: number; max_hp: number; defeated: boolean }[], fleeAtPercent: number): MoraleState {
+  const enemies = combatants.filter((c) => c.side === "enemy");
+  const max = enemies.reduce((s, c) => s + Math.max(0, c.max_hp), 0);
+  const hp = enemies.filter((c) => !c.defeated).reduce((s, c) => s + Math.max(0, c.hp), 0);
+  const hpFraction = max > 0 ? hp / max : 0;
+  const standing = enemies.filter((c) => !c.defeated && c.hp > 0).length;
+  const broken = fleeAtPercent > 0 && enemies.length > 0 && standing > 0 && hpFraction * 100 <= fleeAtPercent;
+  return { hpFraction, standing, total: enemies.length, broken };
+}
+
 export function sheetAbilityMod(sheet: Record<string, unknown>, ability: "str" | "dex" | "con" | "int" | "wis" | "cha"): number {
   const abilities = (sheet.abilities ?? {}) as Record<string, number>;
   return abilityModifier(Number(abilities[ability] ?? 10) || 10);

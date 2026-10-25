@@ -5,17 +5,17 @@ import { Link, useNavigate, useSearchParams } from "react-router";
 import { toast } from "sonner";
 import { useRepos } from "@/app/appContext";
 import { useAppStore } from "@/app/appStore";
-import { qk, useAction, useEntities, useRequiredCampaignId } from "@/app/queries";
+import { qk, useAction, useRequiredCampaignId } from "@/app/queries";
 import { EntityPicker } from "@/components/EntityPicker";
 import { EntityWorkspace } from "@/components/EntityWorkspace";
 import { InventoryPanel } from "@/components/InventoryPanel";
 import { Badge, Button, Dialog, Field, Input, Select } from "@/components/ui";
-import { assessEncounter } from "@/domain/statblock";
 import { creatureInputs, parseSrdCreatures } from "@/domain/srdImport";
 import type { EncounterParticipant, EncounterSide, Entity } from "@/domain/types";
 import { activateEncounter } from "@/domain/workflows/encounterWorkflow";
 import { errorMessage, formatDateTime } from "@/lib/utils";
 import { CombatTracker } from "./CombatTracker";
+import { BAND_TONE, bandLabel, DifficultyPanel, HoardSummary, useEncounterBudget } from "./difficulty";
 
 export function EncountersPage() {
   const [params] = useSearchParams();
@@ -67,8 +67,8 @@ function RunBar({ encounter }: { encounter: Entity }) {
   return (
     <div className="flex items-center gap-2 border-b border-border bg-bg-elevated px-4 py-2 text-[12.5px]">
       <Badge tone="ember">{String(encounter.fields.encounter_type ?? "combat")}</Badge>
-      <Badge>{String(encounter.fields.difficulty ?? "medium")}</Badge>
-      {encounter.fields.xp_total ? <span className="text-ink-muted">{String(encounter.fields.xp_total)} XP</span> : null}
+      <LiveDifficulty encounter={encounter} />
+      <HoardSummary encounterId={encounter.id} />
       <span className="ml-auto flex gap-1">
         {live && (
           <Button size="sm" variant="outline" onClick={() => navigate(`/encounters/${encounter.id}?run=${live.id}`)}>
@@ -118,6 +118,20 @@ function RunBar({ encounter }: { encounter: Entity }) {
   );
 }
 
+/** Computed difficulty badge; marked when it differs from the label saved on the template. */
+function LiveDifficulty({ encounter }: { encounter: Entity }) {
+  const info = useEncounterBudget(encounter);
+  const stored = String(encounter.fields.difficulty ?? "medium");
+  const differs = !info.loading && info.partyLevels.length > 0 && stored !== info.budget.band;
+  return (
+    <span className="flex items-center gap-1" title={differs ? `Template says ${stored}; computed ${info.budget.band} against the current party` : "Computed against the current party"}>
+      <Badge tone={BAND_TONE[info.budget.band]}>{bandLabel(info.rules, info.budget.band)}</Badge>
+      <span className="text-ink-muted">{info.budget.adjustedXp} XP</span>
+      {differs && <span className="text-[11px] text-gold">(template: {stored})</span>}
+    </span>
+  );
+}
+
 const SIDES: EncounterSide[] = ["enemy", "ally", "neutral", "party"];
 
 function Participants({ encounter }: { encounter: Entity }) {
@@ -137,15 +151,7 @@ function Participants({ encounter }: { encounter: Entity }) {
   const update = useAction(({ id, patch }: { id: string; patch: Partial<EncounterParticipant> }) => repos.encounters.updateParticipant(id, patch), { invalidate });
   const remove = useAction((id: string) => repos.encounters.removeParticipant(id), { invalidate });
   const name = (p: EncounterParticipant) => p.label ?? entities.data?.find((e) => e.id === p.entity_id)?.name ?? "Unnamed";
-  const party = useEntities({ kinds: ["pc"] });
   const [importing, setImporting] = useState(false);
-  const totalXp = (list.data ?? []).reduce((sum, p) => sum + p.count * Number(entities.data?.find((e) => e.id === p.entity_id)?.fields.xp ?? 0), 0);
-  const monsterCount = (list.data ?? []).filter((p) => p.side === "enemy").reduce((s, p) => s + p.count, 0);
-  const budget = assessEncounter(
-    totalXp,
-    monsterCount,
-    (party.data ?? []).map((p) => Number(p.fields.level ?? 1) || 1),
-  );
   return (
     <div className="space-y-3">
       <ul className="divide-y divide-border rounded border border-border">
@@ -194,18 +200,7 @@ function Participants({ encounter }: { encounter: Entity }) {
           <Plus size={13} /> Add
         </Button>
       </div>
-      <div className="rounded border border-border bg-bg-elevated p-2 text-[12px]">
-        <div className="font-semibold text-ember-soft">Difficulty vs this campaign’s party (2014 XP)</div>
-        <div className="mt-1 text-ink-muted">
-          Monster XP {budget.monsterXp} × {budget.multiplier} = <span className="text-ink">{budget.adjustedXp} adjusted</span>
-          {" · "}
-          Party budget easy {budget.party.easy} / med {budget.party.medium} / hard {budget.party.hard} / deadly {budget.party.deadly}
-        </div>
-        <Badge tone={budget.band === "deadly" ? "blood" : budget.band === "hard" ? "ember" : budget.band === "easy" || budget.band === "trivial" ? "moss" : "gold"} className="mt-1">
-          {budget.band}
-        </Badge>
-        <p className="mt-1 text-[11px] text-ink-faint">Catalog XP only. Changing a combatant mid-fight does not rewrite this template.</p>
-      </div>
+      <DifficultyPanel encounter={encounter} />
       <div className="flex items-center gap-2 text-[12px]">
         <Button size="sm" variant="outline" disabled={importing} onClick={() => void importSrd()}>
           <Upload size={12} /> Import SRD JSON into Creatures
@@ -249,9 +244,17 @@ function PrepPanel({ encounter }: { encounter: Entity }) {
   const fields = encounter.fields as Record<string, unknown>;
   return (
     <div className="space-y-4">
+      <DifficultyPanel encounter={encounter} />
       <div className="rounded border border-border p-3 text-[12.5px]">
         <div className="label">Tactics & outcomes</div>
-        <p className="text-ink-muted">{encounter.body_md || "Write tactics in the encounter record body."}</p>
+        <p className="whitespace-pre-wrap text-ink-muted">{String(fields.tactics || "") || encounter.body_md || "Write tactics in the Tactics field (Fields tab) or the record body."}</p>
+        {fields.morale || Number(fields.flee_at_percent ?? 0) > 0 ? (
+          <p className="mt-2">
+            <span className="text-ink-faint">Morale: </span>
+            {String(fields.morale || "")}
+            {Number(fields.flee_at_percent ?? 0) > 0 ? <span className="text-ink-faint"> (check when enemies are down to {String(fields.flee_at_percent)}% HP)</span> : null}
+          </p>
+        ) : null}
         {fields.reinforcements ? <p className="mt-2"><span className="text-ink-faint">Reinforcements: </span>{String(fields.reinforcements)}</p> : null}
         {fields.treasure ? <p className="mt-1"><span className="text-ink-faint">Treasure notes: </span>{String(fields.treasure)}</p> : null}
         {fields.alternative_outcomes ? <p className="mt-1"><span className="text-ink-faint">If they flee / parley: </span>{String(fields.alternative_outcomes)}</p> : null}

@@ -2,6 +2,9 @@ import { describe, expect, it } from "vitest";
 import { testRepos } from "@/persistence/testUtils";
 import { formatAttack, formatDamage } from "@/features/encounters/CombatantSheet";
 import {
+  assessEncounter2024,
+  assessWithRules,
+  enemyMorale,
   groupedActions,
   initialResources,
   parseSpellSlots,
@@ -181,5 +184,32 @@ describe("P1 combat run behaviour", () => {
     c = await repos.encounters.damage(arin.id, 1);
     expect(c.conditions.some((x) => x.name === "stable")).toBe(false);
     expect(c.resources.death_fail).toBe(1);
+  });
+});
+
+describe("P2 encounter budgets and morale", () => {
+  it("uses the 2024 budget without a group multiplier", () => {
+    const b = assessEncounter2024(1100, [5, 5, 5, 5]);
+    expect(b.party).toEqual({ easy: 2000, medium: 3000, hard: 4400, deadly: 6600 });
+    expect(b.multiplier).toBe(1);
+    expect(b.band).toBe("trivial");
+    expect(assessEncounter2024(3000, [5, 5, 5, 5]).band).toBe("medium");
+    expect(assessEncounter2024(7000, [5, 5, 5, 5]).band).toBe("deadly");
+  });
+
+  it("switches between 2014 and 2024 rules", () => {
+    expect(assessWithRules("2014", 400, 4, [3, 3, 3, 3]).adjustedXp).toBe(800);
+    expect(assessWithRules("2024", 400, 4, [3, 3, 3, 3]).adjustedXp).toBe(400);
+  });
+
+  it("breaks enemy morale at the flee threshold", () => {
+    const fighters = [
+      { side: "enemy", hp: 3, max_hp: 10, defeated: false },
+      { side: "enemy", hp: 0, max_hp: 10, defeated: true },
+      { side: "party", hp: 1, max_hp: 30, defeated: false },
+    ];
+    expect(enemyMorale(fighters, 50)).toMatchObject({ standing: 1, total: 2, broken: true });
+    expect(enemyMorale(fighters, 10).broken).toBe(false);
+    expect(enemyMorale(fighters, 0).broken).toBe(false);
   });
 });

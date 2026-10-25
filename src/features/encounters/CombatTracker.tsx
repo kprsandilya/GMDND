@@ -8,7 +8,7 @@ import { qk, useAction } from "@/app/queries";
 import { EntityPicker } from "@/components/EntityPicker";
 import { Badge, Button, Checkbox, Dialog, Field, Input, Select, TabPanel, Tabs, Textarea, Tooltip } from "@/components/ui";
 import { d20 } from "@/domain/dice";
-import { CONDITION_REMINDERS, concentrationDc, initialResources, snapshotSheet } from "@/domain/statblock";
+import { CONDITION_REMINDERS, concentrationDc, enemyMorale, initialResources, snapshotSheet } from "@/domain/statblock";
 import type { Combatant, EncounterOutcomes, Entity } from "@/domain/types";
 import { finishEncounter, syncCombatantToToken } from "@/domain/workflows/encounterWorkflow";
 import { cn, errorMessage } from "@/lib/utils";
@@ -135,6 +135,7 @@ export function CombatTracker({ runId, encounter }: { runId: string; encounter: 
           </Button>
         </span>
       </div>
+      <TacticsBar encounter={encounter} combatants={ordered} active={r.status === "active"} onLog={(m) => act(() => repos.encounters.appendLog(runId, m, "info"))} />
       {r.status === "active" && <LegendaryStrip combatants={ordered} currentId={current?.id ?? null} onAct={act} />}
       <div className="grid grid-cols-[1fr_340px] gap-3 px-4 pb-3">
         <ul className="space-y-1">
@@ -202,6 +203,49 @@ export function CombatTracker({ runId, encounter }: { runId: string; encounter: 
       </div>
       <FinishDialog open={finishing} onOpenChange={setFinishing} runId={runId} roomBound={!!r.room_id} hasHoard={true} onDone={() => { refresh(); void qc.invalidateQueries({ queryKey: ["inventory"] }); void qc.invalidateQueries({ queryKey: ["quests"] }); }} />
       <AddCombatantDialog open={adding} onOpenChange={setAdding} runId={runId} onDone={refresh} />
+    </div>
+  );
+}
+
+/** Template tactics and morale, with a prompt once the enemies drop to the flee threshold. */
+function TacticsBar({ encounter, combatants, active, onLog }: { encounter: Entity; combatants: Combatant[]; active: boolean; onLog: (message: string) => void }) {
+  const [open, setOpen] = useState(false);
+  const tactics = String(encounter.fields.tactics ?? "");
+  const morale = String(encounter.fields.morale ?? "");
+  const flee = Number(encounter.fields.flee_at_percent ?? 0) || 0;
+  const state = enemyMorale(combatants, flee);
+  if (!tactics && !morale && !flee) return null;
+  return (
+    <div className="mx-4 mb-2 rounded border border-border bg-bg px-2 py-1 text-[11.5px]">
+      <div className="flex items-center gap-2">
+        <button className="font-semibold text-ember-soft hover:underline" onClick={() => setOpen(!open)}>
+          {open ? "▾" : "▸"} Tactics & morale
+        </button>
+        {state.total > 0 && (
+          <span className="text-ink-muted">
+            Enemies {state.standing}/{state.total} standing · {Math.round(state.hpFraction * 100)}% HP
+          </span>
+        )}
+        {active && state.broken && (
+          <span className="ml-auto flex items-center gap-1 text-gold">
+            Morale breaks at {flee}% — check morale / flee
+            <Button size="sm" variant="ghost" onClick={() => onLog(`Morale check: enemies at ${Math.round(state.hpFraction * 100)}% HP.${morale ? ` ${morale}` : ""}`)}>
+              Log
+            </Button>
+          </span>
+        )}
+      </div>
+      {open && (
+        <div className="mt-1 space-y-1 whitespace-pre-wrap text-ink-muted">
+          {tactics && <div>{tactics}</div>}
+          {morale && (
+            <div>
+              <span className="text-ink-faint">Morale: </span>
+              {morale}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

@@ -229,6 +229,10 @@ export const encounterFieldsSchema = z.object({
   treasure: z.string().default(""),
   alternative_outcomes: z.string().default(""),
   conditional_events: z.string().default(""),
+  tactics: z.string().default(""),
+  morale: z.string().default(""),
+  /** Enemies check morale / flee once their standing HP drops to this share of the total (0 = never). */
+  flee_at_percent: z.number().int().min(0).max(100).default(0),
   xp_total: z.number().int().min(0).default(0),
 });
 
