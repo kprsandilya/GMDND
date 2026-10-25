@@ -6,6 +6,7 @@ import { reachableCells } from "@/domain/movement";
 import type { Door, MapMarker, MapObject, Room, Token, WallSegment } from "@/domain/types";
 import { ROOM_LOOT_REF } from "@/domain/workflows/lootMarker";
 import { cn } from "@/lib/utils";
+import { CanvasMenu, type CanvasMenuState } from "./CanvasMenu";
 import { CELL, selectedOfType, useEditor, type Selection } from "./editorStore";
 
 type Drag =
@@ -61,6 +62,7 @@ export function MapCanvas({ play }: { play: PlayHandlers | null }) {
   const [drag, setDrag] = useState<Drag | null>(null);
   const [spaceDown, setSpaceDown] = useState(false);
   const [bgUrl, setBgUrl] = useState<string | null>(null);
+  const [menu, setMenu] = useState<CanvasMenuState | null>(null);
   const scale = CELL * zoom;
 
   useEffect(() => {
@@ -400,7 +402,18 @@ export function MapCanvas({ play }: { play: PlayHandlers | null }) {
   const offsetFor = (id: string) => (isSelected(id) && mode === "edit" ? moveOffset : { x: 0, y: 0 });
   const cursor = spaceDown || tool === "pan" ? "grab" : tool === "select" ? "default" : "crosshair";
 
+  const onContextMenu = (e: React.MouseEvent) => {
+    e.preventDefault();
+    if (!data) return;
+    const p = toWorld(e);
+    const hit = hitTest(p);
+    if (hit) ed().select([hit]);
+    setMenu({ screen: { x: e.clientX, y: e.clientY }, cell: cellOf(p), hit });
+  };
+
   return (
+    <>
+    {menu && <CanvasMenu menu={menu} onClose={() => setMenu(null)} />}
     <svg
       ref={svgRef}
       className={cn("h-full w-full select-none bg-[#0f0d0b]", drag?.kind === "pan" && "cursor-grabbing")}
@@ -410,7 +423,7 @@ export function MapCanvas({ play }: { play: PlayHandlers | null }) {
       onPointerMove={onPointerMove}
       onPointerUp={(e) => void onPointerUp(e)}
       onPointerLeave={() => ed().setHover(null)}
-      onContextMenu={(e) => e.preventDefault()}
+      onContextMenu={onContextMenu}
     >
       <defs>
         <pattern id="hatch" width={6} height={6} patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
@@ -519,6 +532,7 @@ export function MapCanvas({ play }: { play: PlayHandlers | null }) {
         {tool === "wall" && hover && drag?.kind !== "wall" && <circle cx={Math.round(hover.x + 0.5)} cy={Math.round(hover.y + 0.5)} r={0.12} fill="#f0b35a" pointerEvents="none" />}
       </g>
     </svg>
+    </>
   );
 }
 
