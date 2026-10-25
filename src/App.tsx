@@ -3,6 +3,8 @@ import { HashRouter } from "react-router";
 import { Toaster } from "sonner";
 import { AppProvider } from "./app/appContext";
 import { AppRoutes } from "./app/router";
+import { isTableWindow } from "./app/platform";
+import { TableView } from "./features/table/TableView";
 import { TooltipProvider } from "./components/ui";
 
 const queryClient = new QueryClient({
@@ -10,6 +12,15 @@ const queryClient = new QueryClient({
 });
 
 export function App() {
+  if (isTableWindow()) {
+    return (
+      <QueryClientProvider client={queryClient}>
+        <AppProvider minimal>
+          <TableView />
+        </AppProvider>
+      </QueryClientProvider>
+    );
+  }
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>

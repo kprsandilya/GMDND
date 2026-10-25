@@ -1,5 +1,5 @@
 import { chebyshev, crossesDoor, crossesWall, diagonal5105, rectContains, type Point } from "./geometry";
-import type { Door, DungeonFloor, MapObject, Token } from "./types";
+import type { Door, DungeonFloor, MapObject, Room, TerrainCell, Token } from "./types";
 
 export type DiagonalRule = "chebyshev" | "5-10-5";
 
@@ -10,6 +10,8 @@ export interface MovementRules {
   blockOnWalls: boolean;
   blockOnClosedDoors: boolean;
   blockOnObjects: boolean;
+  /** Difficult terrain and water cost an extra cell of movement per cell entered (5e). */
+  difficultTerrain: boolean;
 }
 
 export const DEFAULT_MOVEMENT_RULES: MovementRules = {
@@ -19,10 +21,16 @@ export const DEFAULT_MOVEMENT_RULES: MovementRules = {
   blockOnWalls: true,
   blockOnClosedDoors: true,
   blockOnObjects: false,
+  difficultTerrain: true,
 };
 
+/** Terrain types that cost double movement. */
+export const COSTLY_TERRAIN = new Set(["difficult", "water"]);
+
 export interface MoveContext {
-  floor: Pick<DungeonFloor, "width" | "height" | "walls" | "cell_feet">;
+  floor: Pick<DungeonFloor, "width" | "height" | "walls" | "cell_feet"> & { terrain?: TerrainCell[] };
+  /** Rooms whose terrain text mentions "difficult" count as difficult terrain throughout. */
+  rooms?: Pick<Room, "x" | "y" | "w" | "h" | "terrain">[];
   tokens: Token[];
   doors: Door[];
   objects: MapObject[];
@@ -35,6 +43,14 @@ export interface MoveResult {
   distanceCells: number;
   distanceFeet: number;
   movementUsedAfter: number;
+  /** Extra cells paid for difficult terrain along the path. */
+  difficultCells?: number;
+}
+
+/** Whether entering this cell costs double movement. */
+export function isDifficultCell(ctx: Pick<MoveContext, "floor" | "rooms">, x: number, y: number): boolean {
+  if (ctx.floor.terrain?.some((t) => t.x === x && t.y === y && COSTLY_TERRAIN.has(t.type))) return true;
+  return !!ctx.rooms?.some((r) => /difficult/i.test(r.terrain ?? "") && x >= r.x && x < r.x + r.w && y >= r.y && y < r.y + r.h);
 }
 
 const BLOCKING_OBJECT_KINDS = new Set(["statue", "altar", "furniture", "container", "bookshelf"]);
@@ -109,10 +125,15 @@ export function evaluateMove(token: Token, to: Point, ctx: MoveContext): MoveRes
     if (rules.blockOnWalls && crossesWall(a, b, ctx.floor.walls)) return { ...base, ok: false, reason: "A wall is in the way" };
   }
 
-  if (rules.enforceBudget && movementUsedAfter > token.speed)
-    return { ...base, ok: false, reason: `Not enough movement (${token.speed - token.movement_used} ft left, needs ${distanceFeet} ft)` };
+  const difficultCells = rules.difficultTerrain ? path.slice(1).filter((c) => isDifficultCell(ctx, c.x, c.y)).length : 0;
+  const total = difficultCells
+    ? { distanceCells: distanceCells + difficultCells, distanceFeet: (distanceCells + difficultCells) * ctx.floor.cell_feet, movementUsedAfter: token.movement_used + (distanceCells + difficultCells) * ctx.floor.cell_feet, difficultCells }
+    : base;
 
-  return { ...base, ok: true };
+  if (rules.enforceBudget && total.movementUsedAfter > token.speed)
+    return { ...total, ok: false, reason: `Not enough movement (${token.speed - token.movement_used} ft left, needs ${total.distanceFeet} ft${difficultCells ? " with difficult terrain" : ""})` };
+
+  return { ...total, ok: true };
 }
 
 function rectsOverlap(a: { x: number; y: number; w: number; h: number }, b: { x: number; y: number; w: number; h: number }): boolean {

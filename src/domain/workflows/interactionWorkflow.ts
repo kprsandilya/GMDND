@@ -285,7 +285,7 @@ export interface MoveReport extends ActionReport {
 export async function moveToken(repos: Repositories, request: MoveRequest): Promise<MoveReport> {
   const token = await repos.dungeons.getToken(request.token_id);
   const data = await repos.dungeons.loadFloor(token.floor_id);
-  const move = evaluateMove(token, request.to, { floor: data.floor, tokens: data.tokens, doors: data.doors, objects: data.objects, rules: request.rules });
+  const move = evaluateMove(token, request.to, { floor: data.floor, rooms: data.rooms, tokens: data.tokens, doors: data.doors, objects: data.objects, rules: request.rules });
   if (!move.ok && !request.force) return { ok: false, outcome: "blocked", messages: [move.reason ?? "Cannot move there"], triggeredMarkers: [], move, enteredRoom: null };
 
   const fromRoom = roomAt(data.rooms, token.x, token.y) ?? null;

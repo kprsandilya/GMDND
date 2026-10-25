@@ -12,6 +12,7 @@ type Drag =
   | { kind: "marquee"; start: Point; current: Point; additive: boolean }
   | { kind: "move"; start: Point; current: Point; moved: boolean }
   | { kind: "room"; start: Point; current: Point }
+  | { kind: "terrain"; start: Point; current: Point }
   | { kind: "wall"; start: Point; current: Point }
   | { kind: "resize"; roomId: string; corner: "nw" | "ne" | "sw" | "se"; origin: Rect; current: Point }
   | { kind: "pan"; startScreen: Point; startPan: Point };
@@ -132,7 +133,7 @@ export function MapCanvas({ play }: { play: PlayHandlers | null }) {
         const dy = e.key === "ArrowUp" ? -1 : e.key === "ArrowDown" ? 1 : 0;
         void s.moveSelection(dx, dy);
       } else if (!e.ctrlKey && !e.metaKey) {
-        const map: Record<string, typeof s.tool> = { v: "select", h: "pan", r: "room", w: "wall", d: "door", o: "object", t: "token", m: "marker", e: "erase" };
+        const map: Record<string, typeof s.tool> = { v: "select", h: "pan", r: "room", w: "wall", d: "door", o: "object", t: "token", m: "marker", g: "terrain", e: "erase" };
         const t = map[e.key.toLowerCase()];
         if (t && (s.mode === "edit" || t === "select" || t === "pan" || t === "token")) s.setTool(t);
       }
@@ -167,13 +168,14 @@ export function MapCanvas({ play }: { play: PlayHandlers | null }) {
       const t = [...data.tokens].reverse().find((t) => visible(t) && c.x >= t.x && c.x < t.x + t.size && c.y >= t.y && c.y < t.y + t.size);
       if (t) return { type: "token", id: t.id };
     }
-    if (layers.markers) {
-      const m = [...data.markers].reverse().find((m) => c.x >= Math.floor(m.x) && c.x < Math.floor(m.x) + Math.max(1, Math.round(m.w)) && c.y >= Math.floor(m.y) && c.y < Math.floor(m.y) + Math.max(1, Math.round(m.h)));
-      if (m) return { type: "marker", id: m.id };
-    }
+    // Objects take priority over markers drawn on top of them; markers stay reachable from the room list.
     if (layers.objects) {
       const o = [...data.objects].reverse().find((o) => visible(o) && c.x >= o.x && c.x < o.x + o.w && c.y >= o.y && c.y < o.y + o.h);
       if (o) return { type: "object", id: o.id };
+    }
+    if (layers.markers) {
+      const m = [...data.markers].reverse().find((m) => c.x >= Math.floor(m.x) && c.x < Math.floor(m.x) + Math.max(1, Math.round(m.w)) && c.y >= Math.floor(m.y) && c.y < Math.floor(m.y) + Math.max(1, Math.round(m.h)));
+      if (m) return { type: "marker", id: m.id };
     }
     if (layers.doors) {
       const d = data.doors.find((d) => {
@@ -265,6 +267,9 @@ export function MapCanvas({ play }: { play: PlayHandlers | null }) {
       case "room":
         setDrag({ kind: "room", start: cellOf(p), current: cellOf(p) });
         break;
+      case "terrain":
+        setDrag({ kind: "terrain", start: cellOf(p), current: cellOf(p) });
+        break;
       case "wall":
         setDrag({ kind: "wall", start: vertexOf(p), current: vertexOf(p) });
         break;
@@ -317,7 +322,7 @@ export function MapCanvas({ play }: { play: PlayHandlers | null }) {
       ed().setView(zoom, { x: drag.startPan.x + e.clientX - drag.startScreen.x, y: drag.startPan.y + e.clientY - drag.startScreen.y });
       return;
     }
-    if (drag.kind === "room") setDrag({ ...drag, current: c });
+    if (drag.kind === "room" || drag.kind === "terrain") setDrag({ ...drag, current: c });
     else if (drag.kind === "wall") setDrag({ ...drag, current: vertexOf(p) });
     else if (drag.kind === "move") setDrag({ ...drag, current: p, moved: drag.moved || Math.abs(p.x - drag.start.x) > 0.3 || Math.abs(p.y - drag.start.y) > 0.3 });
     else setDrag({ ...drag, current: p });
@@ -333,6 +338,11 @@ export function MapCanvas({ play }: { play: PlayHandlers | null }) {
     if (current.kind === "room") {
       const r = normalizeRect(current.start.x, current.start.y, current.current.x + 1, current.current.y + 1);
       if (r.w >= 1 && r.h >= 1) await s.createRoom({ x: Math.max(0, r.x), y: Math.max(0, r.y), w: r.w, h: r.h });
+      return;
+    }
+    if (current.kind === "terrain") {
+      const r = normalizeRect(current.start.x, current.start.y, current.current.x + 1, current.current.y + 1);
+      await s.paintTerrain(r);
       return;
     }
     if (current.kind === "wall") {
@@ -378,7 +388,7 @@ export function MapCanvas({ play }: { play: PlayHandlers | null }) {
   const selectedToken = data ? selectedOfType(selection, "token", data.tokens)[0] : undefined;
   const reach = useMemo(() => {
     if (!data || mode !== "play" || !selectedToken || !layers.reach) return [];
-    return reachableCells(selectedToken, { floor: data.floor, tokens: data.tokens, doors: data.doors, objects: data.objects, rules: { diagonal: settings.diagonalRule, enforceBudget: settings.enforceMovementBudget } });
+    return reachableCells(selectedToken, { floor: data.floor, rooms: data.rooms, tokens: data.tokens, doors: data.doors, objects: data.objects, rules: { diagonal: settings.diagonalRule, enforceBudget: settings.enforceMovementBudget } });
   }, [data, mode, selectedToken, layers.reach, settings.diagonalRule, settings.enforceMovementBudget]);
 
   if (!data) return <div className="flex flex-1 items-center justify-center text-ink-faint">No floor selected.</div>;
@@ -497,6 +507,10 @@ export function MapCanvas({ play }: { play: PlayHandlers | null }) {
           const r = normalizeRect(drag.start.x, drag.start.y, drag.current.x + 1, drag.current.y + 1);
           return <rect x={r.x} y={r.y} width={r.w} height={r.h} fill="#f0b35a" opacity={0.25} stroke="#f0b35a" strokeWidth={0.05} pointerEvents="none" />;
         })()}
+        {drag?.kind === "terrain" && (() => {
+          const r = normalizeRect(drag.start.x, drag.start.y, drag.current.x + 1, drag.current.y + 1);
+          return <rect x={r.x} y={r.y} width={r.w} height={r.h} fill="#5c4a2b" opacity={0.35} stroke="#c9a44c" strokeWidth={0.05} strokeDasharray="0.15 0.1" pointerEvents="none" />;
+        })()}
         {drag?.kind === "wall" && <line x1={drag.start.x} y1={drag.start.y} x2={drag.current.x} y2={drag.current.y} stroke="#f0b35a" strokeWidth={0.12} strokeDasharray="0.2 0.1" pointerEvents="none" />}
         {drag?.kind === "marquee" && (() => {
           const r = normalizeRect(drag.start.x, drag.start.y, drag.current.x, drag.current.y);
@@ -508,14 +522,14 @@ export function MapCanvas({ play }: { play: PlayHandlers | null }) {
   );
 }
 
-function GridLines({ w, h }: { w: number; h: number }) {
+export function GridLines({ w, h }: { w: number; h: number }) {
   const lines: React.ReactNode[] = [];
   for (let x = 0; x <= w; x++) lines.push(<line key={`v${x}`} x1={x} y1={0} x2={x} y2={h} stroke="#000" strokeOpacity={0.35} strokeWidth={0.02} />);
   for (let y = 0; y <= h; y++) lines.push(<line key={`h${y}`} x1={0} y1={y} x2={w} y2={y} stroke="#000" strokeOpacity={0.35} strokeWidth={0.02} />);
   return <g pointerEvents="none">{lines}</g>;
 }
 
-function DoorGlyph({ door, selected }: { door: Door; selected: boolean }) {
+export function DoorGlyph({ door, selected }: { door: Door; selected: boolean }) {
   const seg = doorSegment(door);
   const cx = (seg.a.x + seg.b.x) / 2;
   const cy = (seg.a.y + seg.b.y) / 2;
@@ -538,7 +552,7 @@ function DoorGlyph({ door, selected }: { door: Door; selected: boolean }) {
   );
 }
 
-function ObjectGlyph({ object, selected, showLabel }: { object: MapObject; selected: boolean; showLabel: boolean }) {
+export function ObjectGlyph({ object, selected, showLabel }: { object: MapObject; selected: boolean; showLabel: boolean }) {
   const dim = object.hidden && !object.discovered;
   const color = object.kind === "trap" || object.kind === "hazard" ? "#e67e22" : object.kind === "container" ? "#c9a14a" : object.kind === "secret_passage" ? "#8e44ad" : "#bfae94";
   return (
@@ -559,7 +573,7 @@ function ObjectGlyph({ object, selected, showLabel }: { object: MapObject; selec
   );
 }
 
-function MarkerGlyph({ marker, selected, showLabel }: { marker: MapMarker; selected: boolean; showLabel: boolean }) {
+export function MarkerGlyph({ marker, selected, showLabel }: { marker: MapMarker; selected: boolean; showLabel: boolean }) {
   const w = Math.max(1, marker.w);
   const h = Math.max(1, marker.h);
   const color = MARKER_COLOR[marker.kind];
@@ -581,7 +595,7 @@ function MarkerGlyph({ marker, selected, showLabel }: { marker: MapMarker; selec
   );
 }
 
-function TokenGlyph({ token, selected, showLabel }: { token: Token; selected: boolean; showLabel: boolean }) {
+export function TokenGlyph({ token, selected, showLabel }: { token: Token; selected: boolean; showLabel: boolean }) {
   const color = token.color ?? TOKEN_COLOR[token.kind];
   const r = token.size / 2 - 0.08;
   const cx = token.x + token.size / 2;

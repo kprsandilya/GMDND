@@ -7,7 +7,8 @@ import type { Repositories } from "@/persistence/repositories";
 import type { FloorData } from "@/persistence/repositories/dungeons";
 import { newId } from "@/persistence/repositories/common";
 
-export type Tool = "select" | "pan" | "room" | "wall" | "door" | "object" | "token" | "marker" | "erase";
+export type Tool = "select" | "pan" | "room" | "wall" | "door" | "object" | "token" | "marker" | "terrain" | "erase";
+export type TerrainBrush = "difficult" | "water" | "clear";
 export type ElementType = "room" | "door" | "object" | "token" | "marker" | "wall";
 export type Mode = "edit" | "play";
 
@@ -44,6 +45,7 @@ interface EditorState {
   objectKind: ObjectKind;
   markerKind: MapMarker["kind"];
   doorKind: Door["kind"];
+  terrainKind: TerrainBrush;
   selection: Selection[];
   hover: { x: number; y: number } | null;
   zoom: number;
@@ -62,6 +64,8 @@ interface EditorState {
   setObjectKind: (kind: ObjectKind) => void;
   setMarkerKind: (kind: MapMarker["kind"]) => void;
   setDoorKind: (kind: Door["kind"]) => void;
+  setTerrainKind: (kind: TerrainBrush) => void;
+  paintTerrain: (rect: { x: number; y: number; w: number; h: number }) => Promise<void>;
   select: (items: Selection[], additive?: boolean) => void;
   clearSelection: () => void;
   setHover: (cell: { x: number; y: number } | null) => void;
@@ -140,6 +144,7 @@ export const useEditor = create<EditorState>()((set, get) => {
     objectKind: "container",
     markerKind: "event",
     doorKind: "door",
+    terrainKind: "difficult",
     selection: [],
     hover: null,
     zoom: 1,
@@ -179,6 +184,25 @@ export const useEditor = create<EditorState>()((set, get) => {
     setObjectKind: (objectKind) => set({ objectKind }),
     setMarkerKind: (markerKind) => set({ markerKind }),
     setDoorKind: (doorKind) => set({ doorKind }),
+    setTerrainKind: (terrainKind) => set({ terrainKind }),
+    paintTerrain: async (rect) => {
+      const { repos, data } = requireCtx();
+      const floorId = data.floor.id;
+      const kind = get().terrainKind;
+      const before = data.floor.terrain;
+      const inside = (t: { x: number; y: number }) => t.x >= rect.x && t.x < rect.x + rect.w && t.y >= rect.y && t.y < rect.y + rect.h;
+      const painted: { x: number; y: number; type: string }[] = [];
+      if (kind !== "clear") {
+        for (let x = Math.max(0, rect.x); x < Math.min(data.floor.width, rect.x + rect.w); x++)
+          for (let y = Math.max(0, rect.y); y < Math.min(data.floor.height, rect.y + rect.h); y++) painted.push({ x, y, type: kind });
+      }
+      const after = [...before.filter((t) => !inside(t)), ...painted];
+      await get().run({
+        label: kind === "clear" ? "Clear terrain" : `Paint ${kind} terrain`,
+        do: () => repos.dungeons.updateFloor(floorId, { terrain: after }).then(() => undefined),
+        undo: () => repos.dungeons.updateFloor(floorId, { terrain: before }).then(() => undefined),
+      });
+    },
     select: (items, additive) =>
       set((s) => {
         if (!additive) return { selection: items };
