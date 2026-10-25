@@ -1,8 +1,11 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Capabilities for the single main window: core window features, native dialogs and revealing files in the OS file manager. Filesystem access happens only through the application's own validated commands.",
-  "windows": ["main"],
+  "description": "Capabilities for the main window and the read-only table display window: core window features, native dialogs and revealing files in the OS file manager. Filesystem access happens only through the application's own validated commands.",
+  "windows": [
+    "main",
+    "table"
+  ],
   "permissions": [
     "core:default",
     "core:window:allow-set-title",
@@ -14,6 +17,10 @@
     "core:window:allow-close",
     "core:window:allow-start-dragging",
     "dialog:allow-open",
+    "core:window:allow-is-fullscreen",
+    "core:window:allow-set-fullscreen",
+    "core:window:allow-set-focus",
+    "core:webview:allow-create-webview-window",
     "dialog:allow-save",
     "dialog:allow-message",
     "dialog:allow-ask",
@@ -22,13 +29,27 @@
     {
       "identifier": "opener:allow-open-url",
       "allow": [
-        { "url": "https://github.com/Azgaar/Fantasy-Map-Generator*" },
-        { "url": "https://*" },
-        { "url": "http://*" },
-        { "url": "https://*/*" },
-        { "url": "http://*/*" },
-        { "url": "https://*/**" },
-        { "url": "http://*/**" }
+        {
+          "url": "https://github.com/Azgaar/Fantasy-Map-Generator*"
+        },
+        {
+          "url": "https://*"
+        },
+        {
+          "url": "http://*"
+        },
+        {
+          "url": "https://*/*"
+        },
+        {
+          "url": "http://*/*"
+        },
+        {
+          "url": "https://*/**"
+        },
+        {
+          "url": "http://*/**"
+        }
       ]
     }
   ]

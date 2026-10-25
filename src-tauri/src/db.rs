@@ -215,3 +215,47 @@ pub fn db_execute_script(db: tauri::State<'_, Db>, sql: String) -> AppResult<()>
         Ok(())
     })
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    fn conn() -> Connection {
+        let c = Connection::open_in_memory().unwrap();
+        c.execute_batch("CREATE TABLE t (id INTEGER PRIMARY KEY, name TEXT, score REAL, flag INTEGER);").unwrap();
+        c
+    }
+
+    #[test]
+    fn round_trips_json_values() {
+        let c = conn();
+        execute(&c, "INSERT INTO t (name, score, flag) VALUES (?, ?, ?)", &[json!("Arin"), json!(14.5), json!(true)]).unwrap();
+        let rows = select(&c, "SELECT name, score, flag FROM t", &[]).unwrap();
+        assert_eq!(rows[0]["name"], json!("Arin"));
+        assert_eq!(rows[0]["score"], json!(14.5));
+        assert_eq!(rows[0]["flag"], json!(1));
+    }
+
+    #[test]
+    fn batch_commits_all_statements_together() {
+        let mut c = conn();
+        let statements = vec![
+            Statement { sql: "INSERT INTO t (name) VALUES (?)".into(), params: vec![json!("a")], expect_changes: None },
+            Statement { sql: "INSERT INTO t (name) VALUES (?)".into(), params: vec![json!("b")], expect_changes: Some(1) },
+        ];
+        batch(&mut c, &statements).unwrap();
+        assert_eq!(select(&c, "SELECT count(*) AS n FROM t", &[]).unwrap()[0]["n"], json!(2));
+    }
+
+    #[test]
+    fn batch_rolls_back_when_expected_changes_do_not_match() {
+        let mut c = conn();
+        let statements = vec![
+            Statement { sql: "INSERT INTO t (name) VALUES (?)".into(), params: vec![json!("a")], expect_changes: None },
+            Statement { sql: "UPDATE t SET name = 'x' WHERE id = 999".into(), params: vec![], expect_changes: Some(1) },
+        ];
+        assert!(batch(&mut c, &statements).is_err());
+        assert_eq!(select(&c, "SELECT count(*) AS n FROM t", &[]).unwrap()[0]["n"], json!(0));
+    }
+}

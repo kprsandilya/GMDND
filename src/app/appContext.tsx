@@ -30,8 +30,11 @@ export function useAppInfo(): Pick<AppContextValue, "paths" | "appVersion"> {
 
 type Boot = { status: "loading"; step: string } | { status: "ready"; value: AppContextValue } | { status: "error"; message: string };
 
-/** Opens the database, runs migrations, seeds the demo campaign on first launch and takes a startup snapshot. */
-export function AppProvider({ children }: { children: ReactNode }) {
+/**
+ * Opens the database, runs migrations, seeds the demo campaign on first launch and takes a startup snapshot.
+ * `minimal` (the table display window) only opens the database: no seeding, no session checks, no backups.
+ */
+export function AppProvider({ children, minimal = false }: { children: ReactNode; minimal?: boolean }) {
   const [boot, setBoot] = useState<Boot>({ status: "loading", step: "Starting" });
   const settings = useAppStore((s) => s.settings);
   const campaignId = useAppStore((s) => s.campaignId);
@@ -51,6 +54,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
         const repos = createRepositories(driver);
         const paths = await platform.paths();
         const appVersion = await platform.appVersion();
+        if (minimal) {
+          if (!cancelled) setBoot({ status: "ready", value: { repos, paths, appVersion } });
+          return;
+        }
 
         // Install / refresh the bundled SRD-2024 standard library (campaign-independent records
         // shared by every campaign). Idempotent and versioned, so this is a no-op after the first run.

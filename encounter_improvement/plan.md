@@ -1,5 +1,8 @@
 # Phased plan (after P0)
 
+> **Status (October 2026):** P0–P4 are implemented on the `encounters-p1-p4` branch. See the *Phase 4b* table in
+> [`docs/implementation-plan.md`](../docs/implementation-plan.md) for where each item lives.
+
 P0 is specified in [p0-combatant-sheet.md](p0-combatant-sheet.md) and [p0-loot-markers.md](p0-loot-markers.md). Do those first; they are small and unlock the rest of combat UX.
 
 **Instance vs template is non-negotiable for P0.** The sheet you click is the combatant’s own snapshot. The Creatures list stays the catalog. Mid-fight edits (this cultist lost a hand, this one has a different weapon, this one has 6 HP) never write back to the enemy object.

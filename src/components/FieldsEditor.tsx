@@ -36,6 +36,8 @@ const LONG_TEXT = new Set([
   "treasure",
   "alternative_outcomes",
   "conditional_events",
+  "tactics",
+  "morale",
   "effect",
   "trigger",
   "reveal_condition",

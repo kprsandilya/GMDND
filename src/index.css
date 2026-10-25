@@ -23,6 +23,27 @@
   --font-mono: "Cascadia Code", Consolas, "Courier New", monospace;
 }
 
+/* Cool blue-grey alternative to the default Ember palette (Settings → Theme). */
+:root[data-theme="slate"] {
+  --color-bg: #101418;
+  --color-bg-elevated: #161c22;
+  --color-bg-panel: #1b232a;
+  --color-bg-hover: #222c35;
+  --color-bg-active: #2a3641;
+  --color-border: #2d3843;
+  --color-border-strong: #3d4b58;
+  --color-ink: #dfe6ec;
+  --color-ink-muted: #96a4b1;
+  --color-ink-faint: #64727f;
+  --color-ember: #4f9fd4;
+  --color-ember-soft: #8cc4ec;
+  --color-gold: #c9b25c;
+  --color-moss: #5fb08a;
+  --color-blood: #c9575b;
+  --color-water: #5b8fd9;
+  --color-violet: #9a84d4;
+}
+
 @layer base {
   html,
   body,

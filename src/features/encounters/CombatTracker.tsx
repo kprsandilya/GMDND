@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ChevronRight, Dices, Flag, Heart, Map as MapIcon, Minus, Plus, Shield, Skull, X } from "lucide-react";
+import { ChevronRight, Dices, Flag, GripVertical, Heart, Map as MapIcon, Minus, Plus, Shield, Skull, Users, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router";
 import { toast } from "sonner";
@@ -8,14 +8,15 @@ import { qk, useAction } from "@/app/queries";
 import { EntityPicker } from "@/components/EntityPicker";
 import { Badge, Button, Checkbox, Dialog, Field, Input, Select, TabPanel, Tabs, Textarea, Tooltip } from "@/components/ui";
 import { d20 } from "@/domain/dice";
-import { CONDITION_REMINDERS, concentrationDc, snapshotSheet } from "@/domain/statblock";
+import { CONDITION_REMINDERS, concentrationDc, enemyMorale, initialResources, snapshotSheet } from "@/domain/statblock";
 import type { Combatant, EncounterOutcomes, Entity } from "@/domain/types";
 import { finishEncounter, syncCombatantToToken } from "@/domain/workflows/encounterWorkflow";
 import { cn, errorMessage } from "@/lib/utils";
 import { sortCombatants } from "@/persistence/repositories/encounters";
-import { CombatantSheet, formatActionRoll } from "./CombatantSheet";
+import { CombatantSheet } from "./CombatantSheet";
+import { GroupSaveDialog, type GroupSavePreset } from "./GroupSaveDialog";
 
-const CONDITIONS = ["blinded", "charmed", "deafened", "frightened", "grappled", "incapacitated", "invisible", "paralyzed", "petrified", "poisoned", "prone", "restrained", "stunned", "unconscious", "concentrating"];
+const CONDITIONS = ["blinded", "charmed", "deafened", "frightened", "grappled", "incapacitated", "invisible", "paralyzed", "petrified", "poisoned", "prone", "restrained", "stunned", "unconscious", "concentrating", "exhaustion"];
 
 /** Initiative order, HP/conditions per combatant, round/turn control and the outcome commit dialog. */
 export function CombatTracker({ runId, encounter }: { runId: string; encounter: Entity }) {
@@ -30,6 +31,9 @@ export function CombatTracker({ runId, encounter }: { runId: string; encounter: 
   const [adding, setAdding] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [rightTab, setRightTab] = useState("sheet");
+  const [picked, setPicked] = useState<Set<string>>(new Set());
+  const [groupSave, setGroupSave] = useState<GroupSavePreset | null>(null);
+  const [dragId, setDragId] = useState<string | null>(null);
   const invalidate = [qk.run(runId), ["encounters", "combatants", runId], ["encounters", "runs"], ["dungeon"], ["entities"]];
   const refresh = () => invalidate.forEach((k) => void qc.invalidateQueries({ queryKey: k as unknown[] }));
 
@@ -122,6 +126,9 @@ export function CombatTracker({ runId, encounter }: { runId: string; encounter: 
           )}
           {(r.status === "active" || r.status === "prepared") && (
             <>
+              <Button size="sm" variant="ghost" onClick={() => setGroupSave({})} title="Group saving throw or mass damage (select rows first, or pick targets in the dialog)">
+                <Users size={12} /> Group save{picked.size ? ` (${picked.size})` : ""}
+              </Button>
               <Button size="sm" variant="ghost" onClick={() => setAdding(true)}>
                 <Plus size={12} /> Combatant
               </Button>
@@ -135,6 +142,8 @@ export function CombatTracker({ runId, encounter }: { runId: string; encounter: 
           </Button>
         </span>
       </div>
+      <TacticsBar encounter={encounter} combatants={ordered} active={r.status === "active"} onLog={(m) => act(() => repos.encounters.appendLog(runId, m, "info"))} />
+      {r.status === "active" && <LegendaryStrip combatants={ordered} currentId={current?.id ?? null} onAct={act} />}
       <div className="grid grid-cols-[1fr_340px] gap-3 px-4 pb-3">
         <ul className="space-y-1">
           {ordered.map((c) => (
@@ -144,6 +153,23 @@ export function CombatTracker({ runId, encounter }: { runId: string; encounter: 
               active={current?.id === c.id}
               selected={selectedId === c.id}
               editable={r.status !== "completed" && r.status !== "aborted"}
+              picked={picked.has(c.id)}
+              onPick={() => {
+                const next = new Set(picked);
+                if (next.has(c.id)) next.delete(c.id);
+                else next.add(c.id);
+                setPicked(next);
+              }}
+              dragging={dragId === c.id}
+              onDragStart={() => setDragId(c.id)}
+              onDragEnd={() => setDragId(null)}
+              onDropOn={() => {
+                if (!dragId || dragId === c.id) return;
+                const ids = ordered.map((x) => x.id).filter((id) => id !== dragId);
+                ids.splice(ids.indexOf(c.id), 0, dragId);
+                setDragId(null);
+                void act(() => repos.encounters.reorderInitiative(runId, ids));
+              }}
               onAct={act}
               onSelect={() => {
                 setSelectedId((id) => (id === c.id ? null : c.id));
@@ -169,13 +195,12 @@ export function CombatTracker({ runId, encounter }: { runId: string; encounter: 
                   catalogName={selectedEntity.data?.name}
                   catalogKind={selectedEntity.data?.kind}
                   editable={r.status !== "completed" && r.status !== "aborted"}
-                  onPatch={(patch) => void act(() => repos.encounters.updateCombatant(selected.id, patch), (x) => x)}
-                  onUseAction={(action, dice) =>
-                    void act(() => repos.encounters.appendLog(runId, formatActionRoll(selected.name, action, dice), "action"))
-                  }
-                  onSpendLegendary={() => void act(() => repos.encounters.spendLegendary(selected.id), (x) => x)}
-                  onReset={() => void act(() => repos.encounters.resetSheetFromTemplate(selected.id), (x) => x)}
-                  onDeathSave={() => void act(() => repos.encounters.rollDeathSave(selected.id), (x) => x)}
+                  onChanged={(updated) => void act(async () => updated, (x) => x)}
+                  onGroupSave={(req) => {
+                    const foes = ordered.filter((x) => !x.defeated && x.id !== selected.id && (selected.side === "party" || selected.side === "ally" ? x.side === "enemy" : x.side === "party" || x.side === "ally"));
+                    setPicked(new Set(foes.map((x) => x.id)));
+                    setGroupSave({ ability: req.ability, dc: req.dc, damage: req.damage, source: req.source });
+                  }}
                 />
               ) : (
                 <div className="text-[12px] text-ink-faint">Click a combatant (or press S on the current turn) to open that instance’s sheet.</div>
@@ -206,7 +231,103 @@ export function CombatTracker({ runId, encounter }: { runId: string; encounter: 
         </div>
       </div>
       <FinishDialog open={finishing} onOpenChange={setFinishing} runId={runId} roomBound={!!r.room_id} hasHoard={true} onDone={() => { refresh(); void qc.invalidateQueries({ queryKey: ["inventory"] }); void qc.invalidateQueries({ queryKey: ["quests"] }); }} />
+      <GroupSaveDialog
+        open={groupSave !== null}
+        onOpenChange={(o) => !o && setGroupSave(null)}
+        runId={runId}
+        combatants={ordered}
+        initialTargets={picked.size ? [...picked] : ordered.filter((x) => !x.defeated && x.side === "enemy").map((x) => x.id)}
+        preset={groupSave}
+        onDone={() => {
+          setPicked(new Set());
+          refresh();
+        }}
+      />
       <AddCombatantDialog open={adding} onOpenChange={setAdding} runId={runId} onDone={refresh} />
+    </div>
+  );
+}
+
+/** Template tactics and morale, with a prompt once the enemies drop to the flee threshold. */
+function TacticsBar({ encounter, combatants, active, onLog }: { encounter: Entity; combatants: Combatant[]; active: boolean; onLog: (message: string) => void }) {
+  const [open, setOpen] = useState(false);
+  const tactics = String(encounter.fields.tactics ?? "");
+  const morale = String(encounter.fields.morale ?? "");
+  const flee = Number(encounter.fields.flee_at_percent ?? 0) || 0;
+  const state = enemyMorale(combatants, flee);
+  if (!tactics && !morale && !flee) return null;
+  return (
+    <div className="mx-4 mb-2 rounded border border-border bg-bg px-2 py-1 text-[11.5px]">
+      <div className="flex items-center gap-2">
+        <button className="font-semibold text-ember-soft hover:underline" onClick={() => setOpen(!open)}>
+          {open ? "▾" : "▸"} Tactics & morale
+        </button>
+        {state.total > 0 && (
+          <span className="text-ink-muted">
+            Enemies {state.standing}/{state.total} standing · {Math.round(state.hpFraction * 100)}% HP
+          </span>
+        )}
+        {active && state.broken && (
+          <span className="ml-auto flex items-center gap-1 text-gold">
+            Morale breaks at {flee}% — check morale / flee
+            <Button size="sm" variant="ghost" onClick={() => onLog(`Morale check: enemies at ${Math.round(state.hpFraction * 100)}% HP.${morale ? ` ${morale}` : ""}`)}>
+              Log
+            </Button>
+          </span>
+        )}
+      </div>
+      {open && (
+        <div className="mt-1 space-y-1 whitespace-pre-wrap text-ink-muted">
+          {tactics && <div>{tactics}</div>}
+          {morale && (
+            <div>
+              <span className="text-ink-faint">Morale: </span>
+              {morale}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Legendary actions and resistances for every legendary combatant, usable between other creatures' turns. */
+function LegendaryStrip({
+  combatants,
+  currentId,
+  onAct,
+}: {
+  combatants: Combatant[];
+  currentId: string | null;
+  onAct: <T>(fn: () => Promise<T>, sync?: (r: T) => Combatant | null) => Promise<void>;
+}) {
+  const repos = useRepos();
+  const legendary = combatants.filter((c) => !c.defeated && (Number(c.resources.legendary_max ?? 0) > 0 || Number(c.resources.legres_max ?? 0) > 0));
+  if (legendary.length === 0) return null;
+  return (
+    <div className="mx-4 mb-2 flex flex-wrap items-center gap-2 rounded border border-violet/40 bg-violet/5 px-2 py-1 text-[11.5px]">
+      <span className="font-semibold text-violet">Legendary</span>
+      {legendary.map((c) => {
+        const left = Number(c.resources.legendary ?? 0);
+        const max = Number(c.resources.legendary_max ?? 0);
+        const lr = Number(c.resources.legres ?? 0);
+        const lrMax = Number(c.resources.legres_max ?? 0);
+        return (
+          <span key={c.id} className="flex items-center gap-1 rounded border border-border bg-bg px-1.5 py-0.5">
+            <span className={cn(c.id === currentId && "text-ember-soft")}>{c.name}</span>
+            {max > 0 && (
+              <Button size="sm" variant="ghost" disabled={left <= 0 || c.id === currentId} onClick={() => onAct(() => repos.encounters.spendLegendary(c.id), (x) => x)} title="Spend a legendary action (at the end of another creature's turn)">
+                LA {left}/{max}
+              </Button>
+            )}
+            {lrMax > 0 && (
+              <Button size="sm" variant="ghost" disabled={lr <= 0} onClick={() => onAct(() => repos.encounters.adjustResource(c.id, "legres", -1, "legendary resistance"), (x) => x)} title="Turn a failed save into a success">
+                LR {lr}/{lrMax}
+              </Button>
+            )}
+          </span>
+        );
+      })}
     </div>
   );
 }
@@ -216,6 +337,12 @@ function CombatantRow({
   active,
   selected,
   editable,
+  picked,
+  onPick,
+  dragging,
+  onDragStart,
+  onDragEnd,
+  onDropOn,
   onAct,
   onSelect,
 }: {
@@ -223,6 +350,12 @@ function CombatantRow({
   active: boolean;
   selected: boolean;
   editable: boolean;
+  picked: boolean;
+  onPick: () => void;
+  dragging: boolean;
+  onDragStart: () => void;
+  onDragEnd: () => void;
+  onDropOn: () => void;
   onAct: <T>(fn: () => Promise<T>, sync?: (r: T) => Combatant | null) => Promise<void>;
   onSelect: () => void;
 }) {
@@ -239,8 +372,31 @@ function CombatantRow({
     setAmount("");
   };
   return (
-    <li className={cn("rounded border px-2 py-1.5", active ? "border-ember bg-bg-active" : selected ? "border-ember/60 bg-bg-hover" : "border-border bg-bg", c.defeated && "opacity-50")}>
+    <li
+      className={cn("rounded border px-2 py-1.5", active ? "border-ember bg-bg-active" : selected ? "border-ember/60 bg-bg-hover" : "border-border bg-bg", c.defeated && "opacity-50", dragging && "opacity-40")}
+      onDragOver={(e) => editable && e.preventDefault()}
+      onDrop={(e) => {
+        e.preventDefault();
+        onDropOn();
+      }}
+    >
       <div className="flex items-center gap-2 text-[12.5px]">
+        {editable && (
+          <span
+            draggable
+            onDragStart={(e) => {
+              e.dataTransfer.effectAllowed = "move";
+              e.dataTransfer.setData("text/plain", c.id);
+              onDragStart();
+            }}
+            onDragEnd={onDragEnd}
+            className="cursor-grab text-ink-faint hover:text-ink"
+            title="Drag to reorder initiative"
+          >
+            <GripVertical size={12} />
+          </span>
+        )}
+        {editable && <input type="checkbox" checked={picked} onChange={onPick} title="Select for a group save" className="accent-[var(--color-ember)]" />}
         <Input type="number" className="w-12 text-center" value={c.initiative ?? ""} placeholder="init" disabled={!editable} onChange={(e) => onAct(() => repos.encounters.setInitiative(c.id, e.target.value === "" ? null : Number(e.target.value)))} />
         <button type="button" className={cn("text-left font-semibold hover:underline", c.side === "party" ? "text-water" : c.side === "enemy" ? "text-blood" : c.side === "ally" ? "text-moss" : "")} onClick={onSelect} title="Open this instance’s stat sheet">
           {c.name}
@@ -276,16 +432,44 @@ function CombatantRow({
         </span>
       </div>
       <div className="mt-1 flex flex-wrap items-center gap-1">
-        {c.conditions.map((k) => (
-          <Tooltip key={k.name} content={CONDITION_REMINDERS[k.name] ?? "Click to remove"}>
-            <button className="chip hover:border-blood hover:text-blood" disabled={!editable} onClick={() => onAct(() => repos.encounters.removeCondition(c.id, k.name), sync)}>
-              {k.name}
-              {k.duration !== null ? ` (${k.duration})` : ""} ×
-            </button>
-          </Tooltip>
-        ))}
+        {c.conditions.map((k) =>
+          k.name === "exhaustion" ? (
+            <Tooltip key={k.name} content={CONDITION_REMINDERS.exhaustion}>
+              <span className="chip gap-1">
+                exhaustion {k.level ?? 1}
+                {editable && (
+                  <>
+                    <button className="hover:text-moss" onClick={() => onAct(() => repos.encounters.setExhaustion(c.id, (k.level ?? 1) - 1), sync)} title="One level less">
+                      −
+                    </button>
+                    <button className="hover:text-blood" onClick={() => onAct(() => repos.encounters.setExhaustion(c.id, (k.level ?? 1) + 1), sync)} title="One level more">
+                      +
+                    </button>
+                  </>
+                )}
+              </span>
+            </Tooltip>
+          ) : (
+            <Tooltip key={k.name} content={CONDITION_REMINDERS[k.name] ?? "Click to remove"}>
+              <button className="chip hover:border-blood hover:text-blood" disabled={!editable} onClick={() => onAct(() => repos.encounters.removeCondition(c.id, k.name), sync)}>
+                {k.name}
+                {k.duration !== null ? ` (${k.duration})` : ""} ×
+              </button>
+            </Tooltip>
+          ),
+        )}
         {editable && (
-          <Select value={cond} className="h-6 w-32 text-[11px]" onChange={(e) => { if (e.target.value) { void onAct(() => repos.encounters.addCondition(c.id, { name: e.target.value, duration: null }), sync); setCond(""); } }}>
+          <Select
+            value={cond}
+            className="h-6 w-32 text-[11px]"
+            onChange={(e) => {
+              const name = e.target.value;
+              if (!name) return;
+              if (name === "exhaustion") void onAct(() => repos.encounters.setExhaustion(c.id, 1), sync);
+              else void onAct(() => repos.encounters.addCondition(c.id, { name, duration: null }), sync);
+              setCond("");
+            }}
+          >
             <option value="">+ condition</option>
             {CONDITIONS.map((k) => (
               <option key={k}>{k}</option>
@@ -359,7 +543,6 @@ function AddCombatantDialog({ open, onOpenChange, runId, onDone }: { open: boole
     async () => {
       const sheet = snapshotSheet(entity);
       const max = Number(hp) || Number(sheet.max_hp ?? sheet.hp ?? 10) || 10;
-      const legendary = Number(sheet.legendary_actions ?? 0) || 0;
       return repos.encounters.addCombatant(runId, {
         entity_id: entity?.id ?? null,
         name: name.trim() || entity?.name || "Combatant",
@@ -368,7 +551,7 @@ function AddCombatantDialog({ open, onOpenChange, runId, onDone }: { open: boole
         max_hp: max,
         ac: sheet.ac !== undefined ? Number(sheet.ac) : null,
         initiative_mod: Number(sheet.initiative ?? Math.floor(((Number((sheet.abilities as Record<string, number> | undefined)?.dex ?? 10) || 10) - 10) / 2)),
-        resources: legendary ? { legendary, legendary_max: legendary } : {},
+        resources: initialResources(sheet),
         sheet,
       });
     },

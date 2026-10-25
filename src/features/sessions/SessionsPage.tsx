@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { ArrowUpRight, Check, Play, Square, Trash2 } from "lucide-react";
+import { ArrowUpRight, Check, Play, Sparkles, Square, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link } from "react-router";
 import { useRepos } from "@/app/appContext";
@@ -13,7 +13,9 @@ import { Badge, Button, Checkbox, Dialog, Field, Input, Select, Textarea } from 
 import { formatDate } from "@/domain/calendar";
 import { ENTITY_KINDS, KIND_LABELS, type Entity, type EntityKind, type SessionNote } from "@/domain/types";
 import { advanceCampaignDate, campaignFields, promoteNote, setActiveSession } from "@/domain/workflows/campaignWorkflow";
-import { cn, formatDateTime, relativeTime } from "@/lib/utils";
+import { collectSessionRecap, formatSessionRecap } from "@/domain/workflows/sessionRecap";
+import { toast } from "sonner";
+import { cn, errorMessage, formatDateTime, relativeTime } from "@/lib/utils";
 import { SessionTravelTab } from "./SessionTravelTab";
 
 export function SessionsPage() {
@@ -346,8 +348,24 @@ function RecapTab({ session }: { session: Entity }) {
   const [recap, setRecap] = useState(String(session.fields.recap_md ?? ""));
   const [rewards, setRewards] = useState(String(session.fields.rewards_md ?? ""));
   const save = useAction(() => repos.entities.update(session.id, { fields: { ...session.fields, recap_md: recap, rewards_md: rewards } }), { success: "Recap saved" });
+  const generate = async () => {
+    try {
+      if (!session.campaign_id) throw new Error("This session is not in a campaign.");
+      const summary = formatSessionRecap(await collectSessionRecap(repos, session.campaign_id, session.id));
+      setRecap((current) => (current.trim() ? `${current.trimEnd()}\n\n${summary}` : summary));
+      toast.success("Session log summary added — review and save.");
+    } catch (e) {
+      toast.error(errorMessage(e));
+    }
+  };
   return (
     <div className="space-y-3">
+      <div className="flex items-center gap-2 rounded border border-border bg-bg-elevated p-2 text-[12px]">
+        <span className="text-ink-muted">Pull encounters, defeated foes, loot and events logged during this session into the recap.</span>
+        <Button size="sm" variant="outline" className="ml-auto" onClick={() => void generate()}>
+          <Sparkles size={12} /> Add summary from session log
+        </Button>
+      </div>
       <Field label="Recap (what happened)">
         <MarkdownEditor value={recap} onChange={setRecap} rows={10} />
       </Field>

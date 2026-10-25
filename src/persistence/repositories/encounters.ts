@@ -1,5 +1,6 @@
 import { d20 } from "@/domain/dice";
-import { snapshotSheet } from "@/domain/statblock";
+import { reassignInitiative } from "@/domain/groupCombat";
+import { concentrationDc, initialResources, rollRecharges, snapshotSheet, spendUse, type GroupedAction } from "@/domain/statblock";
 import type {
   Combatant,
   Condition,
@@ -114,6 +115,12 @@ export function sortCombatants(combatants: Combatant[]): Combatant[] {
   });
 }
 
+function pickDeathSaves(resources: Record<string, number>): Record<string, number> {
+  const out: Record<string, number> = {};
+  for (const key of ["death_success", "death_fail"]) if (resources[key] !== undefined) out[key] = resources[key]!;
+  return out;
+}
+
 export class EncounterRepository {
   private readonly entities: EntityRepository;
 
@@ -183,7 +190,6 @@ export class EncounterRepository {
       const ac = sheet.ac !== undefined ? Number(sheet.ac) : null;
       const dexMod = Math.floor(((Number((sheet.abilities as Record<string, number> | undefined)?.dex) || 10) - 10) / 2);
       const initiativeMod = Number(sheet.initiative ?? dexMod);
-      const legendary = Number(sheet.legendary_actions ?? 0) || 0;
       for (let i = 0; i < participant.count; i++) {
         const baseName = participant.label ?? definition?.name ?? "Combatant";
         const name = participant.count > 1 ? `${baseName} ${i + 1}` : baseName;
@@ -200,7 +206,7 @@ export class EncounterRepository {
             hp,
             max_hp: token?.max_hp ?? maxHp,
             ac,
-            resources: legendary ? { legendary, legendary_max: legendary } : {},
+            resources: initialResources(sheet),
             notes: participant.notes,
             sort_order: order++,
             sheet: structuredClone(sheet),
@@ -222,6 +228,7 @@ export class EncounterRepository {
           hp: Number(sheet.hp ?? sheet.max_hp ?? 10),
           max_hp: Number(sheet.max_hp ?? sheet.hp ?? 10),
           ac: sheet.ac !== undefined ? Number(sheet.ac) : null,
+          resources: initialResources(sheet),
           sort_order: order++,
           sheet,
         }),
@@ -310,7 +317,7 @@ export class EncounterRepository {
   }
 
   /** Advances to the next living combatant; wraps to a new round and ticks condition durations. */
-  async nextTurn(runId: string): Promise<{ run: EncounterRun; combatants: Combatant[] }> {
+  async nextTurn(runId: string, random: () => number = Math.random): Promise<{ run: EncounterRun; combatants: Combatant[] }> {
     const run = await this.getRun(runId);
     const ordered = sortCombatants(await this.combatants(runId));
     if (ordered.length === 0) return { run, combatants: ordered };
@@ -339,15 +346,17 @@ export class EncounterRepository {
     }
     const current = ordered[index]!;
     const legendaryMax = Number(current.resources.legendary_max ?? current.sheet.legendary_actions ?? 0) || 0;
-    if (legendaryMax > 0) {
-      statements.push({
-        sql: "UPDATE combatants SET resources = ? WHERE id = ?",
-        params: [json({ ...current.resources, legendary: legendaryMax, legendary_max: legendaryMax }), current.id],
-      });
+    let resources = current.resources;
+    if (legendaryMax > 0) resources = { ...resources, legendary: legendaryMax, legendary_max: legendaryMax };
+    const recharge = rollRecharges(current.sheet, resources, random);
+    if (recharge.messages.length) resources = recharge.resources;
+    if (resources !== current.resources) {
+      statements.push({ sql: "UPDATE combatants SET resources = ? WHERE id = ?", params: [json(resources), current.id] });
     }
     const log = [...run.log];
     if (newRound) log.push({ at: now(), round, message: `Round ${round} begins.`, kind: "round" });
-    log.push({ at: now(), round, message: `${ordered[index]!.name}'s turn.`, kind: "turn" });
+    log.push({ at: now(), round, message: `${current.name}'s turn.`, kind: "turn" });
+    for (const message of recharge.messages) log.push({ at: now(), round, message: `${current.name}: ${message}`, kind: "action" });
     statements.push({
       sql: "UPDATE encounter_runs SET turn_index = ?, round = ?, log = ?, updated_at = ? WHERE id = ?",
       params: [index, round, json(log), now(), runId],
@@ -398,12 +407,11 @@ export class EncounterRepository {
     const entity = await this.entities.find(c.entity_id);
     if (!entity) return c;
     const sheet = snapshotSheet(entity);
-    const legendary = Number(sheet.legendary_actions ?? 0) || 0;
     return this.updateCombatant(id, {
       sheet,
       ac: sheet.ac !== undefined ? Number(sheet.ac) : c.ac,
       max_hp: Number(sheet.max_hp ?? sheet.hp ?? c.max_hp) || c.max_hp,
-      resources: legendary ? { ...c.resources, legendary, legendary_max: legendary } : c.resources,
+      resources: { ...pickDeathSaves(c.resources), ...initialResources(sheet) },
     });
   }
 
@@ -456,6 +464,7 @@ export class EncounterRepository {
     if (hp === 0 && success >= 3) {
       message += " Stabilized.";
       success = 3;
+      if (!conditions.some((x) => x.name === "stable")) conditions = [...conditions, { name: "stable", duration: null }];
     }
     if (fail >= 3) {
       defeated = true;
@@ -488,6 +497,7 @@ export class EncounterRepository {
     if (hp === 0) {
       if (c.side === "party") {
         if (alreadyDown) {
+          conditions = conditions.filter((x) => x.name !== "stable");
           const fail = Number(resources.death_fail ?? 0) + 1;
           resources = { ...resources, death_fail: fail };
           defeated = fail >= 3;
@@ -503,6 +513,9 @@ export class EncounterRepository {
         extra = " and drops to 0 HP";
       }
     }
+    if (amount > 0 && hp > 0 && c.conditions.some((x) => x.name === "concentrating")) {
+      extra += `; Constitution save DC ${concentrationDc(amount)} to keep concentrating`;
+    }
     const updated = await this.updateCombatant(id, { temp_hp: c.temp_hp - absorbed, hp, defeated, conditions, resources });
     await this.appendLog(c.run_id, `${c.name} takes ${amount} damage${note ? ` (${note})` : ""}${extra}.`, "damage");
     return updated;
@@ -511,7 +524,7 @@ export class EncounterRepository {
   async heal(id: string, amount: number): Promise<Combatant> {
     const c = await this.getCombatant(id);
     const hp = Math.min(c.max_hp, c.hp + amount);
-    const conditions = hp > 0 ? c.conditions.filter((x) => x.name !== "unconscious") : c.conditions;
+    const conditions = hp > 0 ? c.conditions.filter((x) => x.name !== "unconscious" && x.name !== "stable") : c.conditions;
     const resources = hp > 0 ? { ...c.resources, death_success: 0, death_fail: 0 } : c.resources;
     const updated = await this.updateCombatant(id, { hp, defeated: false, conditions, resources });
     await this.appendLog(c.run_id, `${c.name} regains ${amount} HP.`, "heal");
@@ -537,6 +550,73 @@ export class EncounterRepository {
     const c = await this.getCombatant(id);
     const updated = await this.updateCombatant(id, { conditions: c.conditions.filter((x) => x.name !== name) });
     await this.appendLog(c.run_id, `${c.name} is no longer ${name}.`, "condition");
+    return updated;
+  }
+
+  /** Logs the use of an ability and spends a limited use (recharge / X per day) on this instance. */
+  async useAbility(id: string, action: Pick<GroupedAction, "title" | "limit">, message: string): Promise<Combatant> {
+    const c = await this.getCombatant(id);
+    const spent = spendUse(c.resources, action);
+    if (!spent.ok) throw new Error(`${c.name} has no uses of ${action.title} left.`);
+    const updated = spent.resources === c.resources ? c : await this.updateCombatant(id, { resources: spent.resources });
+    await this.appendLog(c.run_id, message, "action");
+    return updated;
+  }
+
+  /** Changes a numeric counter (legendary resistance, spell slot, limited use) within [0, max]. */
+  async adjustResource(id: string, key: string, delta: number, label?: string): Promise<Combatant> {
+    const c = await this.getCombatant(id);
+    const max = c.resources[`${key}_max`];
+    const current = Number(c.resources[key] ?? 0);
+    const next = Math.max(0, max !== undefined ? Math.min(max, current + delta) : current + delta);
+    if (next === current) return c;
+    const updated = await this.updateCombatant(id, { resources: { ...c.resources, [key]: next } });
+    if (label) await this.appendLog(c.run_id, `${c.name} ${delta < 0 ? "uses" : "regains"} ${label} (${next}${max !== undefined ? `/${max}` : ""} left).`, "action");
+    return updated;
+  }
+
+  /** Sets the exhaustion level (0 removes it). Level 6 is death. */
+  async setExhaustion(id: string, level: number): Promise<Combatant> {
+    const c = await this.getCombatant(id);
+    const clamped = Math.max(0, Math.min(6, Math.round(level)));
+    const others = c.conditions.filter((x) => x.name !== "exhaustion");
+    const conditions: Condition[] = clamped > 0 ? [...others, { name: "exhaustion", duration: null, level: clamped }] : others;
+    const defeated = clamped >= 6 ? true : c.defeated;
+    const updated = await this.updateCombatant(id, { conditions, defeated });
+    await this.appendLog(c.run_id, clamped > 0 ? `${c.name} exhaustion level ${clamped}${clamped >= 6 ? " — dies" : ""}.` : `${c.name} is no longer exhausted.`, "condition");
+    return updated;
+  }
+
+  /**
+   * Reorders the initiative track to `orderedIds` (drag and drop). Only the values that must change are
+   * nudged, and the combatant whose turn it is keeps the turn.
+   */
+  async reorderInitiative(runId: string, orderedIds: string[]): Promise<{ run: EncounterRun; combatants: Combatant[] }> {
+    const run = await this.getRun(runId);
+    const before = sortCombatants(await this.combatants(runId));
+    const currentId = run.status === "active" ? before[run.turn_index % Math.max(1, before.length)]?.id : null;
+    const values = reassignInitiative(before, orderedIds);
+    const statements: Statement[] = [];
+    for (const c of before) {
+      const value = values.get(c.id);
+      if (value !== undefined && value !== c.initiative) statements.push({ sql: "UPDATE combatants SET initiative = ? WHERE id = ?", params: [value, c.id] });
+    }
+    if (statements.length === 0) return { run, combatants: before };
+    const after = sortCombatants(before.map((c) => ({ ...c, initiative: values.get(c.id) ?? c.initiative })));
+    const turnIndex = currentId ? Math.max(0, after.findIndex((c) => c.id === currentId)) : run.turn_index;
+    statements.push({ sql: "UPDATE encounter_runs SET turn_index = ?, updated_at = ? WHERE id = ?", params: [turnIndex, now(), runId] });
+    await this.db.batch(statements);
+    await this.appendLog(runId, "Initiative order adjusted by the DM.", "info");
+    return { run: await this.getRun(runId), combatants: await this.combatants(runId) };
+  }
+
+  /** Applies a resolved group save: logs the summary, then damages each target that took damage. */
+  async applyGroupSave(runId: string, rows: { id: string; damage: number; success: boolean }[], summary: string): Promise<Combatant[]> {
+    await this.appendLog(runId, summary, "action");
+    const updated: Combatant[] = [];
+    for (const row of rows) {
+      if (row.damage > 0) updated.push(await this.damage(row.id, row.damage, row.success ? "saved" : "failed save"));
+    }
     return updated;
   }
 

@@ -19,6 +19,7 @@
     "setup": "npm install && npm run fmg:install && npm run fmg:build",
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:rust": "cargo test --manifest-path src-tauri/Cargo.toml",
     "smoke": "node scripts/smoke-test.mjs",
     "typecheck": "tsc -p tsconfig.app.json --noEmit",
     "lint": "tsc -p tsconfig.app.json --noEmit"

@@ -349,3 +349,21 @@ pub fn archive_extract_assets(
 ) -> AppResult<usize> {
     extract_archive_assets(&paths, Path::new(&src_path), &mappings)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::safe_entry_name;
+
+    #[test]
+    fn accepts_normal_entry_names() {
+        assert!(safe_entry_name("workbench.sqlite").is_ok());
+        assert!(safe_entry_name("assets/maps/world.map").is_ok());
+    }
+
+    #[test]
+    fn rejects_zip_slip_entry_names() {
+        for bad in ["", "../evil", "assets/../../evil", "/abs", r"a\b", "C:evil"] {
+            assert!(safe_entry_name(bad).is_err(), "should reject {bad:?}");
+        }
+    }
+}

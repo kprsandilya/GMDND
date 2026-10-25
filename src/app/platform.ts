@@ -4,10 +4,24 @@
  */
 import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import { getVersion } from "@tauri-apps/api/app";
+import { getCurrentWebviewWindow, WebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { ask, confirm, message, open, save } from "@tauri-apps/plugin-dialog";
 import { openUrl, revealItemInDir } from "@tauri-apps/plugin-opener";
 
 export const isTauri = (): boolean => typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
+
+/** Label of the second-screen table display window. */
+export const TABLE_WINDOW_LABEL = "table";
+
+/** True inside the table display window (a read-only player-facing view of one floor). */
+export function isTableWindow(): boolean {
+  if (!isTauri()) return false;
+  try {
+    return getCurrentWebviewWindow().label === TABLE_WINDOW_LABEL;
+  } catch {
+    return false;
+  }
+}
 
 export interface AppPaths {
   data_dir: string;
@@ -89,6 +103,24 @@ export const platform = {
   message: (text: string, title = "DM Workbench"): Promise<void> => (isTauri() ? message(text, { title }).then(() => undefined) : Promise.resolve(window.alert(text))),
   revealInFolder: (path: string): Promise<void> => revealItemInDir(path),
   openExternal: (url: string): Promise<void> => (isTauri() ? openUrl(url) : Promise.resolve(void window.open(url, "_blank"))),
+
+  // table display window
+  openTableWindow: async (): Promise<void> => {
+    const existing = await WebviewWindow.getByLabel(TABLE_WINDOW_LABEL);
+    if (existing) {
+      await existing.setFocus();
+      return;
+    }
+    const win = new WebviewWindow(TABLE_WINDOW_LABEL, { url: "/", title: "DM Workbench — Table view", width: 1280, height: 800, center: true });
+    await new Promise<void>((resolve, reject) => {
+      void win.once("tauri://created", () => resolve());
+      void win.once("tauri://error", (e) => reject(new Error(String(e.payload))));
+    });
+  },
+  toggleFullscreen: async (): Promise<void> => {
+    const win = getCurrentWebviewWindow();
+    await win.setFullscreen(!(await win.isFullscreen()));
+  },
 };
 
 export const MAP_FILTER = [{ name: "Azgaar map", extensions: ["map"] }];

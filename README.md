@@ -22,7 +22,7 @@ a SQLite database and an assets folder inside your user profile.
 
 ## Prerequisites (Windows)
 
-- Node.js 22.5 or newer (the test suite uses the built-in `node:sqlite` module) and npm 10+
+- Node.js 24 or newer (`package.json` engines; the test suite uses the built-in `node:sqlite` module) and npm 10+
 - Rust stable toolchain with the MSVC target (`rustup default stable-x86_64-pc-windows-msvc`)
 - Microsoft Visual Studio Build Tools with the "Desktop development with C++" workload
 - WebView2 Runtime (preinstalled on Windows 10/11; the installer also bootstraps it)
@@ -63,6 +63,7 @@ Useful scripts:
 | --- | --- |
 | `npm run typecheck` | strict TypeScript check of the frontend |
 | `npm test` | unit and integration tests (domain rules, repositories, workflows) |
+| `npm run test:rust` | Rust unit tests for the desktop core |
 | `npm run smoke` | end-to-end smoke test against a running desktop window (see below) |
 | `npm run build` | typecheck + production frontend bundle into `dist/` |
 
@@ -115,8 +116,13 @@ To install, run the generated `-setup.exe`. The app appears in the Start menu as
   building/location → dungeon). Each record carries summary, body, read-aloud text, DM notes and secrets.
 - **Dungeons & Maps** – grid editor with rooms, walls, doors, objects, tokens, markers and layers; undo/redo;
   *Play* mode with rule-checked movement, object interactions, door actions and marker triggers.
-- **Encounters** – templates with participants; runs create combatants (and tokens when bound to a room);
-  combat tracker with initiative, HP, conditions and outcome commit.
+- **Encounters** – templates with participants, tactics and morale; difficulty against a chosen party (2014 or
+  2024 rules). Runs create combatants with their own editable sheets (and tokens when bound to a room). The
+  tracker rolls attacks (advantage/disadvantage, crits) and damage, tracks recharge and per-day abilities,
+  legendary actions/resistances, spell slots, death saves and exhaustion, runs group saves and mass damage,
+  and lets you drag to reorder initiative.
+- **Table display** – *Table* in the dungeon toolbar opens a second window for a screen the players can see,
+  with fog of war and no DM-only information.
 - **Characters & NPCs, Creatures, Items & Equipment, Lore & Documents, Quests & Events, Timeline** –
   interconnected records with `[[wiki links]]`, relations, inventories and objectives.
 - **Standard rules library (SRD 2024)** – the full SRD-2024 bestiary and item/magic-item lists are
@@ -125,7 +131,8 @@ To install, run the generated `-setup.exe`. The app appears in the Start menu as
   records are shared across campaigns (not copied into each one); duplicate one to make an editable,
   campaign-owned copy. The data comes from
   [open5e](https://github.com/open5e/open5e-api); regenerate the bundle with `npm run srd:build`.
-- **Session Manager** – plan, run and recap sessions; quick notes are promoted into permanent records.
+- **Session Manager** – plan, run and recap sessions; quick notes are promoted into permanent records; the
+  recap can pull encounters, defeated foes, loot and events from the session log.
 - **Global Search** (Ctrl+Shift+F) and the **command palette** (Ctrl+K) reach any record.
 - **Settings & Data** – defaults, backups, campaign export/import, storage locations.
 

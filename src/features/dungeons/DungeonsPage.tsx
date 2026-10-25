@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Box, DoorClosed, Eraser, Flag, Grid3x3, Hand, Layers, MousePointer2, Pencil, Play, Plus, Redo2, Square, Swords, Trash2, Undo2, UserRound, X, ZoomIn, ZoomOut } from "lucide-react";
+import { Box, DoorClosed, Eraser, Flag, Grid3x3, Hand, Layers, Mountain, MousePointer2, Pencil, Play, Plus, Redo2, Square, Swords, Trash2, Undo2, UserRound, X, ZoomIn, ZoomOut } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router";
 import { toast } from "sonner";
@@ -14,10 +14,11 @@ import type { Door, MapMarker, ObjectKind } from "@/domain/types";
 import { activateEncounter } from "@/domain/workflows/encounterWorkflow";
 import { cn, errorMessage } from "@/lib/utils";
 import { PlaceTokenDialog, RollDialog } from "./dialogs";
-import { CELL, useEditor, type Layers as LayerFlags, type Tool } from "./editorStore";
+import { CELL, useEditor, type Layers as LayerFlags, type TerrainBrush, type Tool } from "./editorStore";
 import { Inspector } from "./Inspector";
 import { MapCanvas } from "./MapCanvas";
 import { useDungeonPlay } from "./useDungeonPlay";
+import { TableControl } from "@/features/table/TableControl";
 
 export function DungeonsPage() {
   const { id } = useParams<{ id: string }>();
@@ -63,6 +64,7 @@ const TOOLS: { tool: Tool; label: string; key: string; icon: React.ReactNode; ed
   { tool: "object", label: "Place object", key: "O", icon: <Box size={14} />, editOnly: true },
   { tool: "token", label: "Place token", key: "T", icon: <UserRound size={14} /> },
   { tool: "marker", label: "Place marker", key: "M", icon: <Flag size={14} />, editOnly: true },
+  { tool: "terrain", label: "Paint terrain (difficult / water / clear) — drag a rectangle", key: "G", icon: <Mountain size={14} />, editOnly: true },
   { tool: "erase", label: "Erase", key: "E", icon: <Eraser size={14} />, editOnly: true },
 ];
 
@@ -199,6 +201,7 @@ function DungeonView({ dungeonId }: { dungeonId: string }) {
           <Button size="icon" variant="ghost" onClick={() => zoomBy(1.2)}>
             <ZoomIn size={14} />
           </Button>
+          <TableControl floorId={activeFloorId} />
           <div className="relative">
             <Button size="sm" variant={layersOpen ? "secondary" : "ghost"} onClick={() => setLayersOpen((o) => !o)}>
               <Layers size={13} /> Layers
@@ -248,6 +251,15 @@ function DungeonView({ dungeonId }: { dungeonId: string }) {
           {ed.mode === "edit" && ed.tool === "marker" && (
             <Select value={ed.markerKind} onChange={(e) => ed.setMarkerKind(e.target.value as MapMarker["kind"])} className="mt-2 h-7 w-10 px-0 text-[10px]" title="Marker kind">
               {["event", "encounter", "trap", "treasure", "clue", "npc", "secret", "note"].map((k) => (
+                <option key={k} value={k}>
+                  {k}
+                </option>
+              ))}
+            </Select>
+          )}
+          {ed.mode === "edit" && ed.tool === "terrain" && (
+            <Select value={ed.terrainKind} onChange={(e) => ed.setTerrainKind(e.target.value as TerrainBrush)} className="mt-2 h-7 w-10 px-0 text-[10px]" title="Terrain brush">
+              {["difficult", "water", "clear"].map((k) => (
                 <option key={k} value={k}>
                   {k}
                 </option>
