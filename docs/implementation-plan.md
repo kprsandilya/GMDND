@@ -33,7 +33,9 @@ map data or links.*
 | Undo/redo across all edits (repository-level commands) | done | `features/dungeons/editorStore.ts`, `domain/undo.ts` |
 | Rooms as persistent entities with read-aloud/notes/secrets/state/inventory | done | `rooms` table + `EntityDetail` |
 | Multiple floors per dungeon, per-floor size and scale | done | `DungeonsPage.tsx` |
-| Background images per floor | partial | column exists (`background_asset`), no picker in the UI yet |
+| Background images per floor (battle-map image under the grid) | done | floor inspector → *Add battle map image* |
+| Terrain brush (difficult / water / clear), double movement cost | done | `G` tool, `domain/movement.ts` |
+| Right-click menu on the canvas | done | `features/dungeons/CanvasMenu.tsx` |
 
 ## Phase 3 – Character simulation and inventories — done
 
@@ -65,6 +67,27 @@ consequences.*
 | Sessions: plan, live bar, quick notes → promote to records, log, recap | done | `features/sessions` |
 | Campaign log of consequences across modules | done | `campaign_log` |
 
+## Phase 4b – Encounter improvements (P0–P4) — done
+
+Specified in `encounter_improvement/`. Instance sheets (P0) are the base for everything below.
+
+| Item | Status | Where |
+| --- | --- | --- |
+| P0 Combatant instance sheets, loot markers | done | `CombatantSheet.tsx`, `workflows/lootMarker.ts` |
+| P1 Roll to-hit (normal/adv/dis, nat 20/1) and damage (crit doubles dice) into the run log | done | `statblock.ts` `rollAttack`/`rollDamage` |
+| P1 2024 "Attack Roll: +N" parsing; bonus actions, reactions, legendary actions get buttons | done | `groupedActions` |
+| P1 Recharge and X/Day abilities tracked per instance, recharge rolled at turn start | done | `rollRecharges`, `EncounterRepository.nextTurn` |
+| P1 Legendary strip between turns; legendary resistance and spell-slot counters | done | `CombatTracker.tsx` `LegendaryStrip` |
+| P1 Concentration DC in the log, death saves with stable state, exhaustion levels, condition reminders | done | `EncounterRepository.damage` / `rollDeathSave` / `setExhaustion` |
+| P2 Difficulty vs a chosen party, 2014 or 2024 DMG rules, enemy side only, save to template | done | `features/encounters/difficulty.tsx` |
+| P2 Tactics, morale notes and flee threshold with a tracker prompt | done | `TacticsBar`, `enemyMorale` |
+| P2 Hoard summary in the encounter header; SRD creatures in the participant picker | done | `HoardSummary` |
+| P3 Battle-map image, token → instance sheet in play mode, loot markers only in explored rooms | done | `Inspector.tsx`, `MapCanvas.tsx` |
+| P4 Table display window with fog of war (second screen) | done | `features/table`, `domain/tableView.ts` |
+| P4 Group saves / mass damage | done | `GroupSaveDialog.tsx`, `domain/groupCombat.ts` |
+| P4 Drag to reorder initiative | done | `EncounterRepository.reorderInitiative` |
+| P4 Session recap from the session log | done | `workflows/sessionRecap.ts` |
+
 ## Phase 5 – Advanced worldbuilding and polish — partial
 
 | Item | Status | Notes |
@@ -73,9 +96,10 @@ consequences.*
 | Backups (full zip), auto snapshots, safe restore with pre-restore copies | done | `src-tauri/src/archive.rs`, `SettingsPage.tsx` |
 | Versioned campaign export/import with id remapping and integrity notes | done | `persistence/exportImport.ts` |
 | Windows installer (NSIS per-user + MSI) | done | `npm run desktop:build` |
-| Automated tests: domain, workflows, persistence (29 tests) + CDP smoke test | done | `npm test`, `npm run smoke` |
-| Context menus on the canvas, keyboard-only editing of every field | partial | inspector covers all fields; right-click menus not implemented |
-| Second theme ("slate") | planned | setting exists; only the Ember theme is styled |
+| Automated tests: domain, workflows, persistence (~390 tests), Rust unit tests + CDP smoke test | done | `npm test`, `npm run test:rust`, `npm run smoke` |
+| Context menus on the canvas | done | right-click on the dungeon map |
+| Second theme ("slate") | done | Settings → Theme |
+| Wiki links follow renames; ranked multi-word search | done | `EntityRepository.renameWikiLinks`, `scoreSearchHit` |
 | Richer timeline (drag to reschedule, multi-calendar) | planned | |
 
 ## Verification matrix
@@ -83,7 +107,8 @@ consequences.*
 | Check | Command | Expected |
 | --- | --- | --- |
 | Type safety | `npm run typecheck` | no errors |
-| Unit/integration tests | `npm test` | 3 files, 29 tests passing |
+| Unit/integration tests | `npm test` | all files passing (~390 tests) |
+| Rust unit tests | `npm run test:rust` | path validation, archive entries, SQL batches |
 | Production bundle | `npm run build` | `dist/` produced |
 | Desktop smoke | `npm run smoke` (with CDP port) | all checks pass, screenshots in `smoke-artifacts/` |
 | Installer | `npm run desktop:build:nsis` | `src-tauri/target/release/bundle/nsis/*-setup.exe` |

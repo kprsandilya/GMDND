@@ -130,11 +130,22 @@ workbench's **Save to campaign** button is what stores the map in the campaign.
   no network access path in this app and are not used.
 - A harmless upstream exception can be logged when the frame is torn down while a timer is pending.
 
+### Table display window
+
+`platform.openTableWindow()` creates a second webview labelled `table` at the app root. `App.tsx` detects the
+label and renders only `features/table/TableView.tsx` inside a minimal `AppProvider` (database open, no seeding,
+no backups). The DM picks the floor and fog settings from the dungeon toolbar; they are stored in the
+`settings` table under `table_view`, and the table window polls them and the floor every 1.5 s.
+`domain/tableView.ts` (`playerView`) strips everything secret before rendering: hidden tokens, undiscovered
+objects and doors, DM-only markers, room text and enemy HP. With fog on, an SVG mask reveals explored rooms
+and a light radius around PC tokens.
+
 ## Security and privacy posture
 
-- **Capabilities** (`src-tauri/capabilities/default.json`): core window functions, `dialog` open/save/
-  message/ask/confirm, `opener:reveal-item-in-dir`, and `opener:open-url` restricted to the generator's GitHub
-  page. No `fs`, no `shell`, no `http` plugin.
+- **Capabilities** (`src-tauri/capabilities/default.json`), granted to the `main` and `table` windows: core
+  window functions (including creating, focusing and full-screening the table window), `dialog`
+  open/save/message/ask/confirm, `opener:reveal-item-in-dir`, and `opener:open-url` for http(s) links (opened in
+  the user's own browser, used by links inside the atlas). No `fs`, no `shell`, no `http` plugin.
 - **Own commands only**: all file access goes through Rust commands that validate paths. Asset paths are
   relative, must not contain `..`, backslashes or absolute roots, and resolve under `<app-data>/assets`.
   Arbitrary-path reads/writes (`read_text_file`, `write_text_file`, backups, archives) only act on paths the
