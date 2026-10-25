@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ChevronRight, Dices, Flag, Heart, Map as MapIcon, Minus, Plus, Shield, Skull, X } from "lucide-react";
+import { ChevronRight, Dices, Flag, GripVertical, Heart, Map as MapIcon, Minus, Plus, Shield, Skull, Users, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router";
 import { toast } from "sonner";
@@ -14,6 +14,7 @@ import { finishEncounter, syncCombatantToToken } from "@/domain/workflows/encoun
 import { cn, errorMessage } from "@/lib/utils";
 import { sortCombatants } from "@/persistence/repositories/encounters";
 import { CombatantSheet } from "./CombatantSheet";
+import { GroupSaveDialog, type GroupSavePreset } from "./GroupSaveDialog";
 
 const CONDITIONS = ["blinded", "charmed", "deafened", "frightened", "grappled", "incapacitated", "invisible", "paralyzed", "petrified", "poisoned", "prone", "restrained", "stunned", "unconscious", "concentrating", "exhaustion"];
 
@@ -30,6 +31,9 @@ export function CombatTracker({ runId, encounter }: { runId: string; encounter: 
   const [adding, setAdding] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [rightTab, setRightTab] = useState("sheet");
+  const [picked, setPicked] = useState<Set<string>>(new Set());
+  const [groupSave, setGroupSave] = useState<GroupSavePreset | null>(null);
+  const [dragId, setDragId] = useState<string | null>(null);
   const invalidate = [qk.run(runId), ["encounters", "combatants", runId], ["encounters", "runs"], ["dungeon"], ["entities"]];
   const refresh = () => invalidate.forEach((k) => void qc.invalidateQueries({ queryKey: k as unknown[] }));
 
@@ -122,6 +126,9 @@ export function CombatTracker({ runId, encounter }: { runId: string; encounter: 
           )}
           {(r.status === "active" || r.status === "prepared") && (
             <>
+              <Button size="sm" variant="ghost" onClick={() => setGroupSave({})} title="Group saving throw or mass damage (select rows first, or pick targets in the dialog)">
+                <Users size={12} /> Group save{picked.size ? ` (${picked.size})` : ""}
+              </Button>
               <Button size="sm" variant="ghost" onClick={() => setAdding(true)}>
                 <Plus size={12} /> Combatant
               </Button>
@@ -146,6 +153,23 @@ export function CombatTracker({ runId, encounter }: { runId: string; encounter: 
               active={current?.id === c.id}
               selected={selectedId === c.id}
               editable={r.status !== "completed" && r.status !== "aborted"}
+              picked={picked.has(c.id)}
+              onPick={() => {
+                const next = new Set(picked);
+                if (next.has(c.id)) next.delete(c.id);
+                else next.add(c.id);
+                setPicked(next);
+              }}
+              dragging={dragId === c.id}
+              onDragStart={() => setDragId(c.id)}
+              onDragEnd={() => setDragId(null)}
+              onDropOn={() => {
+                if (!dragId || dragId === c.id) return;
+                const ids = ordered.map((x) => x.id).filter((id) => id !== dragId);
+                ids.splice(ids.indexOf(c.id), 0, dragId);
+                setDragId(null);
+                void act(() => repos.encounters.reorderInitiative(runId, ids));
+              }}
               onAct={act}
               onSelect={() => {
                 setSelectedId((id) => (id === c.id ? null : c.id));
@@ -172,6 +196,11 @@ export function CombatTracker({ runId, encounter }: { runId: string; encounter: 
                   catalogKind={selectedEntity.data?.kind}
                   editable={r.status !== "completed" && r.status !== "aborted"}
                   onChanged={(updated) => void act(async () => updated, (x) => x)}
+                  onGroupSave={(req) => {
+                    const foes = ordered.filter((x) => !x.defeated && x.id !== selected.id && (selected.side === "party" || selected.side === "ally" ? x.side === "enemy" : x.side === "party" || x.side === "ally"));
+                    setPicked(new Set(foes.map((x) => x.id)));
+                    setGroupSave({ ability: req.ability, dc: req.dc, damage: req.damage, source: req.source });
+                  }}
                 />
               ) : (
                 <div className="text-[12px] text-ink-faint">Click a combatant (or press S on the current turn) to open that instance’s sheet.</div>
@@ -202,6 +231,18 @@ export function CombatTracker({ runId, encounter }: { runId: string; encounter: 
         </div>
       </div>
       <FinishDialog open={finishing} onOpenChange={setFinishing} runId={runId} roomBound={!!r.room_id} hasHoard={true} onDone={() => { refresh(); void qc.invalidateQueries({ queryKey: ["inventory"] }); void qc.invalidateQueries({ queryKey: ["quests"] }); }} />
+      <GroupSaveDialog
+        open={groupSave !== null}
+        onOpenChange={(o) => !o && setGroupSave(null)}
+        runId={runId}
+        combatants={ordered}
+        initialTargets={picked.size ? [...picked] : ordered.filter((x) => !x.defeated && x.side === "enemy").map((x) => x.id)}
+        preset={groupSave}
+        onDone={() => {
+          setPicked(new Set());
+          refresh();
+        }}
+      />
       <AddCombatantDialog open={adding} onOpenChange={setAdding} runId={runId} onDone={refresh} />
     </div>
   );
@@ -296,6 +337,12 @@ function CombatantRow({
   active,
   selected,
   editable,
+  picked,
+  onPick,
+  dragging,
+  onDragStart,
+  onDragEnd,
+  onDropOn,
   onAct,
   onSelect,
 }: {
@@ -303,6 +350,12 @@ function CombatantRow({
   active: boolean;
   selected: boolean;
   editable: boolean;
+  picked: boolean;
+  onPick: () => void;
+  dragging: boolean;
+  onDragStart: () => void;
+  onDragEnd: () => void;
+  onDropOn: () => void;
   onAct: <T>(fn: () => Promise<T>, sync?: (r: T) => Combatant | null) => Promise<void>;
   onSelect: () => void;
 }) {
@@ -319,8 +372,31 @@ function CombatantRow({
     setAmount("");
   };
   return (
-    <li className={cn("rounded border px-2 py-1.5", active ? "border-ember bg-bg-active" : selected ? "border-ember/60 bg-bg-hover" : "border-border bg-bg", c.defeated && "opacity-50")}>
+    <li
+      className={cn("rounded border px-2 py-1.5", active ? "border-ember bg-bg-active" : selected ? "border-ember/60 bg-bg-hover" : "border-border bg-bg", c.defeated && "opacity-50", dragging && "opacity-40")}
+      onDragOver={(e) => editable && e.preventDefault()}
+      onDrop={(e) => {
+        e.preventDefault();
+        onDropOn();
+      }}
+    >
       <div className="flex items-center gap-2 text-[12.5px]">
+        {editable && (
+          <span
+            draggable
+            onDragStart={(e) => {
+              e.dataTransfer.effectAllowed = "move";
+              e.dataTransfer.setData("text/plain", c.id);
+              onDragStart();
+            }}
+            onDragEnd={onDragEnd}
+            className="cursor-grab text-ink-faint hover:text-ink"
+            title="Drag to reorder initiative"
+          >
+            <GripVertical size={12} />
+          </span>
+        )}
+        {editable && <input type="checkbox" checked={picked} onChange={onPick} title="Select for a group save" className="accent-[var(--color-ember)]" />}
         <Input type="number" className="w-12 text-center" value={c.initiative ?? ""} placeholder="init" disabled={!editable} onChange={(e) => onAct(() => repos.encounters.setInitiative(c.id, e.target.value === "" ? null : Number(e.target.value)))} />
         <button type="button" className={cn("text-left font-semibold hover:underline", c.side === "party" ? "text-water" : c.side === "enemy" ? "text-blood" : c.side === "ally" ? "text-moss" : "")} onClick={onSelect} title="Open this instance’s stat sheet">
           {c.name}

@@ -1,4 +1,5 @@
 import { d20 } from "@/domain/dice";
+import { reassignInitiative } from "@/domain/groupCombat";
 import { concentrationDc, initialResources, rollRecharges, snapshotSheet, spendUse, type GroupedAction } from "@/domain/statblock";
 import type {
   Combatant,
@@ -583,6 +584,39 @@ export class EncounterRepository {
     const defeated = clamped >= 6 ? true : c.defeated;
     const updated = await this.updateCombatant(id, { conditions, defeated });
     await this.appendLog(c.run_id, clamped > 0 ? `${c.name} exhaustion level ${clamped}${clamped >= 6 ? " — dies" : ""}.` : `${c.name} is no longer exhausted.`, "condition");
+    return updated;
+  }
+
+  /**
+   * Reorders the initiative track to `orderedIds` (drag and drop). Only the values that must change are
+   * nudged, and the combatant whose turn it is keeps the turn.
+   */
+  async reorderInitiative(runId: string, orderedIds: string[]): Promise<{ run: EncounterRun; combatants: Combatant[] }> {
+    const run = await this.getRun(runId);
+    const before = sortCombatants(await this.combatants(runId));
+    const currentId = run.status === "active" ? before[run.turn_index % Math.max(1, before.length)]?.id : null;
+    const values = reassignInitiative(before, orderedIds);
+    const statements: Statement[] = [];
+    for (const c of before) {
+      const value = values.get(c.id);
+      if (value !== undefined && value !== c.initiative) statements.push({ sql: "UPDATE combatants SET initiative = ? WHERE id = ?", params: [value, c.id] });
+    }
+    if (statements.length === 0) return { run, combatants: before };
+    const after = sortCombatants(before.map((c) => ({ ...c, initiative: values.get(c.id) ?? c.initiative })));
+    const turnIndex = currentId ? Math.max(0, after.findIndex((c) => c.id === currentId)) : run.turn_index;
+    statements.push({ sql: "UPDATE encounter_runs SET turn_index = ?, updated_at = ? WHERE id = ?", params: [turnIndex, now(), runId] });
+    await this.db.batch(statements);
+    await this.appendLog(runId, "Initiative order adjusted by the DM.", "info");
+    return { run: await this.getRun(runId), combatants: await this.combatants(runId) };
+  }
+
+  /** Applies a resolved group save: logs the summary, then damages each target that took damage. */
+  async applyGroupSave(runId: string, rows: { id: string; damage: number; success: boolean }[], summary: string): Promise<Combatant[]> {
+    await this.appendLog(runId, summary, "action");
+    const updated: Combatant[] = [];
+    for (const row of rows) {
+      if (row.damage > 0) updated.push(await this.damage(row.id, row.damage, row.success ? "saved" : "failed save"));
+    }
     return updated;
   }
 
