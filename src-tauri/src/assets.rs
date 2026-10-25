@@ -181,3 +181,37 @@ pub fn write_text_file(path: String, text: String) -> AppResult<()> {
     std::fs::write(path, text.as_bytes())?;
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn paths() -> Paths {
+        Paths::new(PathBuf::from("data"))
+    }
+
+    #[test]
+    fn resolves_plain_relative_paths_inside_the_asset_dir() {
+        let p = paths();
+        assert_eq!(p.resolve_asset("maps/world.map").unwrap(), PathBuf::from("data").join("assets").join("maps/world.map"));
+        assert_eq!(p.resolve_asset("image.png").unwrap(), PathBuf::from("data").join("assets").join("image.png"));
+        // an interior "." is normalised away by Path::components and cannot leave the directory
+        assert!(p.resolve_asset("maps/./a.map").unwrap().starts_with(PathBuf::from("data").join("assets")));
+    }
+
+    #[test]
+    fn rejects_paths_that_could_escape() {
+        let p = paths();
+        for bad in ["", "../secret.txt", "maps/../../x", "/etc/passwd", r"maps\..\x", r"C:\Windows\win.ini", "C:foo", "./maps/a.map"] {
+            assert!(p.resolve_asset(bad).is_err(), "should reject {bad:?}");
+        }
+    }
+
+    #[test]
+    fn sanitizes_extensions() {
+        assert_eq!(sanitize_extension(".PNG"), "png");
+        assert_eq!(sanitize_extension("../exe"), "exe");
+        assert_eq!(sanitize_extension(""), "bin");
+        assert_eq!(sanitize_extension("averyveryverylongextension"), "averyveryver");
+    }
+}
