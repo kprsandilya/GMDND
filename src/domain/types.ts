@@ -475,6 +475,8 @@ export interface Condition {
   name: string;
   duration: number | null; // rounds, null = until removed
   note?: string;
+  /** Exhaustion level 1–6 (only used by the "exhaustion" condition). */
+  level?: number;
 }
 
 export interface Combatant {

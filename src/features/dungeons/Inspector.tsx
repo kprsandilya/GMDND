@@ -15,7 +15,7 @@ import type { Door, InteractionDefinition, MapMarker, MapObject, Room, Token } f
 import { tokenOwner } from "@/domain/workflows/interactionWorkflow";
 import { ROOM_LOOT_REF } from "@/domain/workflows/lootMarker";
 import { cn, errorMessage } from "@/lib/utils";
-import { CombatantSheet, formatActionRoll } from "@/features/encounters/CombatantSheet";
+import { CombatantSheet } from "@/features/encounters/CombatantSheet";
 import { selectedOfType, useEditor } from "./editorStore";
 import type { DungeonPlay } from "./useDungeonPlay";
 
@@ -682,16 +682,10 @@ function TokenInspector({ token, play }: { token: Token; play: DungeonPlay }) {
             catalogName={liveEntity.data?.name}
             catalogKind={liveEntity.data?.kind}
             editable={true}
-            onPatch={(patch) =>
-              void repos.encounters.updateCombatant(live.data!.id, patch).then((c) => {
-                void qc.invalidateQueries({ queryKey: ["encounters"] });
-                if (c.token_id) void updateToken(c.token_id, { hp: c.hp, max_hp: c.max_hp, conditions: c.conditions.map((x) => x.name) });
-              })
-            }
-            onUseAction={(action, dice) => void repos.encounters.appendLog(live.data!.run_id, formatActionRoll(live.data!.name, action, dice), "action")}
-            onSpendLegendary={() => void repos.encounters.spendLegendary(live.data!.id).then(() => qc.invalidateQueries({ queryKey: ["encounters"] }))}
-            onReset={() => void repos.encounters.resetSheetFromTemplate(live.data!.id).then(() => qc.invalidateQueries({ queryKey: ["encounters"] }))}
-            onDeathSave={() => void repos.encounters.rollDeathSave(live.data!.id).then(() => qc.invalidateQueries({ queryKey: ["encounters"] }))}
+            onChanged={(c) => {
+              void qc.invalidateQueries({ queryKey: ["encounters"] });
+              if (c?.token_id) void updateToken(c.token_id, { hp: c.hp, max_hp: c.max_hp, conditions: c.conditions.map((x) => x.name) });
+            }}
           />
         </Section>
       )}

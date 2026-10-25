@@ -29,8 +29,9 @@ export function findDiceExpressions(text: string): string[] {
   return found;
 }
 
-function toHitBonus(text: string): number | null {
-  const match = /([+-]\s*\d+)\s+to hit/i.exec(text);
+/** Reads "+5 to hit" (2014 style) or "Melee Attack Roll: +5" (2024 style). */
+export function toHitBonus(text: string): number | null {
+  const match = /attack roll:\s*([+-]\s*\d+)/i.exec(text) ?? /([+-]\s*\d+)\s+to hit/i.exec(text);
   if (!match) return null;
   return Number(match[1]!.replace(/\s+/g, ""));
 }
@@ -195,4 +196,186 @@ export function sheetAbilityMod(sheet: Record<string, unknown>, ability: "str" |
 
 export function concentrationDc(damage: number): number {
   return Math.max(10, Math.floor(damage / 2));
+}
+
+// ---- limited-use abilities (recharge, X/Day) ----
+
+export type UsageLimit = { kind: "recharge"; min: number } | { kind: "per_day"; uses: number };
+
+/** Reads "(Recharge 5–6)", "(Recharge 6)" or "(3/Day)" from the first line of an ability. */
+export function usageLimit(text: string): UsageLimit | null {
+  const first = (text ?? "").split("\n")[0] ?? "";
+  const recharge = /recharge\s+(\d)(?:\s*[-–—]\s*6)?/i.exec(first);
+  if (recharge) return { kind: "recharge", min: Math.max(1, Math.min(6, Number(recharge[1]))) };
+  const perDay = /\((\d+)\/day/i.exec(first);
+  if (perDay) return { kind: "per_day", uses: Math.max(1, Number(perDay[1])) };
+  return null;
+}
+
+export function abilitySlug(title: string): string {
+  return title
+    .toLowerCase()
+    .replace(/\(.*?\)/g, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "");
+}
+
+/** Resource key that tracks one limited ability on a combatant. */
+export function usageKey(limit: UsageLimit, title: string): string {
+  return `${limit.kind === "recharge" ? "recharge" : "uses"}:${abilitySlug(title)}`;
+}
+
+export type ActionGroup = "action" | "bonus" | "reaction" | "legendary";
+
+export interface GroupedAction extends ParsedAction {
+  group: ActionGroup;
+  limit: UsageLimit | null;
+  save: { ability: string; dc: number } | null;
+}
+
+const SAVE_ABILITIES = ["strength", "dexterity", "constitution", "intelligence", "wisdom", "charisma"];
+
+/** Reads "Constitution Saving Throw: DC 12" (2024) or "DC 13 Dexterity saving throw" (2014). */
+export function saveFromText(text: string): { ability: string; dc: number } | null {
+  const a = /(strength|dexterity|constitution|intelligence|wisdom|charisma)\s+saving throw:?\s*dc\s*(\d+)/i.exec(text);
+  if (a) return { ability: a[1]!.toLowerCase(), dc: Number(a[2]) };
+  const b = /dc\s*(\d+)\s+(strength|dexterity|constitution|intelligence|wisdom|charisma)\s+saving throw/i.exec(text);
+  if (b) return { ability: b[2]!.toLowerCase(), dc: Number(b[1]) };
+  return null;
+}
+
+/** Every usable entry on a sheet, grouped: actions, bonus actions, reactions and legendary actions. */
+export function groupedActions(sheet: Record<string, unknown>): GroupedAction[] {
+  const decorate = (a: ParsedAction, group: ActionGroup): GroupedAction => ({ ...a, group, limit: usageLimit(a.body), save: saveFromText(a.body) });
+  const out: GroupedAction[] = actionsFromSheet(sheet).map((a) => decorate(a, "action"));
+  const extra: [unknown, ActionGroup][] = [
+    [sheet.bonus_actions, "bonus"],
+    [sheet.reactions, "reaction"],
+    [sheet.legendary, "legendary"],
+  ];
+  for (const [blob, group] of extra) if (typeof blob === "string") out.push(...parseActionBlob(blob).map((a) => decorate(a, group)));
+  return out;
+}
+
+/** Ability → save bonus from a "Dexterity +3, Wisdom +2" string, falling back to the ability modifier. */
+export function saveBonus(sheet: Record<string, unknown>, ability: string): number {
+  const full = ability.toLowerCase();
+  const short = full.slice(0, 3) as "str" | "dex" | "con" | "int" | "wis" | "cha";
+  const text = String(sheet.saves ?? "");
+  const match = new RegExp(`\\b(${full}|${short})\\w*\\s*([+-]\\s*\\d+)`, "i").exec(text);
+  if (match) return Number(match[2]!.replace(/\s+/g, ""));
+  return sheetAbilityMod(sheet, short);
+}
+
+export const SAVE_ABILITY_NAMES = SAVE_ABILITIES;
+
+// ---- spell slots ----
+
+/** Parses "1st: 4, 2nd: 3", "1:4 2:3" or "4/3/2" into { 1: 4, 2: 3, ... }. */
+export function parseSpellSlots(text: unknown): Record<number, number> {
+  const raw = String(text ?? "").trim();
+  const out: Record<number, number> = {};
+  if (!raw) return out;
+  if (/^\d+(\s*\/\s*\d+)+$/.test(raw)) {
+    raw.split("/").forEach((n, i) => {
+      const v = Number(n.trim());
+      if (v > 0 && i < 9) out[i + 1] = v;
+    });
+    return out;
+  }
+  for (const m of raw.matchAll(/([1-9])(?:st|nd|rd|th)?(?:\s*level)?\s*[:=]\s*(\d+)/gi)) {
+    const level = Number(m[1]);
+    const count = Number(m[2]);
+    if (count > 0) out[level] = count;
+  }
+  return out;
+}
+
+/** Fresh per-run counters derived from a sheet: legendary actions/resistances, spell slots, limited uses. */
+export function initialResources(sheet: Record<string, unknown>): Record<string, number> {
+  const res: Record<string, number> = {};
+  const legendary = Number(sheet.legendary_actions ?? 0) || 0;
+  if (legendary) Object.assign(res, { legendary, legendary_max: legendary });
+  const legres = Number(sheet.legendary_resistances ?? 0) || 0;
+  if (legres) Object.assign(res, { legres, legres_max: legres });
+  for (const [level, count] of Object.entries(parseSpellSlots(sheet.spell_slots))) {
+    res[`slot_${level}`] = count;
+    res[`slot_${level}_max`] = count;
+  }
+  for (const a of groupedActions(sheet)) {
+    if (!a.limit) continue;
+    res[usageKey(a.limit, a.title)] = a.limit.kind === "recharge" ? 1 : a.limit.uses;
+  }
+  return res;
+}
+
+/** Remaining uses of a limited ability: recharge is 1 (ready) or 0 (spent); X/Day counts down. */
+export function usesLeft(resources: Record<string, number>, action: Pick<GroupedAction, "limit" | "title">): number | null {
+  if (!action.limit) return null;
+  const key = usageKey(action.limit, action.title);
+  const value = resources[key];
+  if (value === undefined) return action.limit.kind === "recharge" ? 1 : action.limit.uses;
+  return value;
+}
+
+/** Spends one use; returns the new resources and whether the use was allowed. */
+export function spendUse(resources: Record<string, number>, action: Pick<GroupedAction, "limit" | "title">): { resources: Record<string, number>; ok: boolean } {
+  const left = usesLeft(resources, action);
+  if (left === null) return { resources, ok: true };
+  if (left <= 0) return { resources, ok: false };
+  return { resources: { ...resources, [usageKey(action.limit!, action.title)]: left - 1 }, ok: true };
+}
+
+/** Start-of-turn recharge rolls for every spent recharge ability. */
+export function rollRecharges(
+  sheet: Record<string, unknown>,
+  resources: Record<string, number>,
+  random: () => number = Math.random,
+): { resources: Record<string, number>; messages: string[] } {
+  const next = { ...resources };
+  const messages: string[] = [];
+  for (const a of groupedActions(sheet)) {
+    if (a.limit?.kind !== "recharge") continue;
+    const key = usageKey(a.limit, a.title);
+    if ((next[key] ?? 1) > 0) continue;
+    const rolled = 1 + Math.floor(random() * 6);
+    if (rolled >= a.limit.min) {
+      next[key] = 1;
+      messages.push(`${a.title} recharges (rolled ${rolled}).`);
+    } else {
+      messages.push(`${a.title} does not recharge (rolled ${rolled}, needs ${a.limit.min}+).`);
+    }
+  }
+  return { resources: next, messages };
+}
+
+// ---- attack and damage rolls ----
+
+export type RollMode = "normal" | "advantage" | "disadvantage";
+
+export interface AttackRoll {
+  d20: number;
+  rolls: number[];
+  total: number;
+  crit: boolean;
+  fumble: boolean;
+}
+
+export function rollAttack(bonus: number, mode: RollMode = "normal", random: () => number = Math.random): AttackRoll {
+  const one = () => 1 + Math.floor(random() * 20);
+  const rolls = mode === "normal" ? [one()] : [one(), one()];
+  const d20 = mode === "advantage" ? Math.max(...rolls) : mode === "disadvantage" ? Math.min(...rolls) : rolls[0]!;
+  return { d20, rolls, total: d20 + bonus, crit: d20 === 20, fumble: d20 === 1 };
+}
+
+/** Rolls a damage expression; a critical hit doubles the number of dice (not the modifier). */
+export function rollDamage(expression: string, crit = false, random: () => number = Math.random): { total: number; rolls: number[]; modifier: number } | null {
+  const m = /^\s*(\d*)d(\d+)\s*([+-]\s*\d+)?\s*$/i.exec(expression);
+  if (!m) return null;
+  const count = (m[1] ? Number(m[1]) : 1) * (crit ? 2 : 1);
+  const sides = Number(m[2]);
+  const modifier = m[3] ? Number(m[3].replace(/\s+/g, "")) : 0;
+  const rolls: number[] = [];
+  for (let i = 0; i < count; i++) rolls.push(1 + Math.floor(random() * sides));
+  return { total: rolls.reduce((s, x) => s + x, 0) + modifier, rolls, modifier };
 }
