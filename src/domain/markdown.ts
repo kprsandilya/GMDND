@@ -25,6 +25,19 @@ export function rewriteWikiLinks(markdown: string, resolve: (name: string) => st
   });
 }
 
+/**
+ * Points `[[Old Name]]` / `[[Old Name|label]]` at a renamed record. Matching is case-insensitive;
+ * a custom label is kept, a bare link takes the new name.
+ */
+export function renameWikiTarget(markdown: string, oldName: string, newName: string): string {
+  const old = oldName.trim().toLowerCase();
+  if (!markdown || !old) return markdown;
+  return markdown.replace(WIKI_RE, (raw, target: string, label?: string) => {
+    if (target.trim().toLowerCase() !== old) return raw;
+    return label !== undefined ? `[[${newName}|${label}]]` : `[[${newName}]]`;
+  });
+}
+
 export function stripMarkdown(markdown: string, max = 160): string {
   const plain = markdown
     .replace(WIKI_RE, (_, t: string, l?: string) => (l ?? t).trim())

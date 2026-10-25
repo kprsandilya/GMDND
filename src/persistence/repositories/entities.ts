@@ -1,4 +1,5 @@
 import type { Waypoint } from "@/domain/journeyTypes";
+import { renameWikiTarget } from "@/domain/markdown";
 import { normalizeFields } from "@/domain/schemas";
 import type { Entity, EntityInput, EntityKind, EntityLink, LinkedEntity } from "@/domain/types";
 import type { Row, SqlDriver, Statement } from "../driver";
@@ -55,6 +56,42 @@ export interface SearchHit {
   entity: Entity;
   snippet: string;
   field: string;
+  /** Relevance: name matches beat summary/tag matches, which beat body and note matches. */
+  score: number;
+}
+
+const SEARCH_FIELDS: { column: keyof Entity | "tags"; label: string; weight: number }[] = [
+  { column: "summary", label: "summary", weight: 30 },
+  { column: "tags", label: "tags", weight: 25 },
+  { column: "body_md", label: "description", weight: 15 },
+  { column: "read_aloud_md", label: "read-aloud", weight: 12 },
+  { column: "dm_notes_md", label: "DM notes", weight: 10 },
+  { column: "secret_md", label: "secret", weight: 10 },
+];
+
+/** Scores one record for a multi-word query. Every word must match somewhere, or the score is 0. */
+export function scoreSearchHit(entity: Pick<Entity, "name" | "summary" | "body_md" | "read_aloud_md" | "dm_notes_md" | "secret_md" | "tags">, term: string): number {
+  const words = term.toLowerCase().split(/\s+/).filter(Boolean);
+  if (words.length === 0) return 0;
+  const name = entity.name.toLowerCase();
+  const phrase = words.join(" ");
+  let score = 0;
+  if (name === phrase) score += 200;
+  else if (name.startsWith(phrase)) score += 120;
+  else if (name.includes(phrase)) score += 80;
+  for (const word of words) {
+    let best = 0;
+    if (name === word) best = 100;
+    else if (new RegExp(`(^|[^a-z0-9])${word.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`).test(name)) best = 60;
+    else if (name.includes(word)) best = 45;
+    for (const f of SEARCH_FIELDS) {
+      const value = (f.column === "tags" ? entity.tags.join(" ") : String(entity[f.column as keyof typeof entity] ?? "")).toLowerCase();
+      if (value.includes(word)) best = Math.max(best, f.weight);
+    }
+    if (best === 0) return 0;
+    score += best;
+  }
+  return score;
 }
 
 const ENTITY_COLUMNS =
@@ -135,7 +172,44 @@ export class EntityRepository {
     const { set, params, empty } = buildSet(merged, { tags: json, fields: json });
     if (empty) return existing;
     await this.db.execute(`UPDATE entities SET ${set} WHERE id = ?`, [...params, id]);
+    if (patch.name !== undefined && patch.name.trim() && patch.name.trim() !== existing.name) {
+      await this.renameWikiLinks(existing, patch.name.trim());
+    }
     return this.get(id);
+  }
+
+  /**
+   * After a rename, rewrites `[[Old Name]]` links in the same campaign (Markdown columns and `*_md`
+   * fields). Skipped when another record still carries the old name, so links are never stolen.
+   */
+  async renameWikiLinks(entity: Pick<Entity, "id" | "name" | "campaign_id">, newName: string): Promise<number> {
+    const scopeId = entity.campaign_id ?? entity.id;
+    const clash = await this.db.select(
+      "SELECT id FROM entities WHERE id != ? AND (campaign_id = ? OR id = ? OR campaign_id IS NULL) AND name = ? COLLATE NOCASE LIMIT 1",
+      [entity.id, scopeId, scopeId, entity.name],
+    );
+    if (clash.length) return 0;
+    const pattern = `%[[${entity.name}%`;
+    const rows = await this.db.select(
+      `SELECT ${ENTITY_COLUMNS} FROM entities WHERE (campaign_id = ? OR id = ?) AND (
+         body_md LIKE ? COLLATE NOCASE OR read_aloud_md LIKE ? COLLATE NOCASE OR dm_notes_md LIKE ? COLLATE NOCASE OR
+         secret_md LIKE ? COLLATE NOCASE OR summary LIKE ? COLLATE NOCASE OR fields LIKE ? COLLATE NOCASE)`,
+      [scopeId, scopeId, pattern, pattern, pattern, pattern, pattern, pattern],
+    );
+    const statements: Statement[] = [];
+    for (const other of rows.map(mapEntity)) {
+      const r = (md: string) => renameWikiTarget(md, entity.name, newName);
+      const fields: Record<string, unknown> = { ...other.fields };
+      for (const [key, value] of Object.entries(fields)) if (typeof value === "string" && key.endsWith("_md")) fields[key] = r(value);
+      const next = { body_md: r(other.body_md), read_aloud_md: r(other.read_aloud_md), dm_notes_md: r(other.dm_notes_md), secret_md: r(other.secret_md), summary: r(other.summary), fields: json(fields) };
+      if (next.body_md === other.body_md && next.read_aloud_md === other.read_aloud_md && next.dm_notes_md === other.dm_notes_md && next.secret_md === other.secret_md && next.summary === other.summary && next.fields === json(other.fields)) continue;
+      statements.push({
+        sql: "UPDATE entities SET body_md = ?, read_aloud_md = ?, dm_notes_md = ?, secret_md = ?, summary = ?, fields = ? WHERE id = ?",
+        params: [next.body_md, next.read_aloud_md, next.dm_notes_md, next.secret_md, next.summary, next.fields, other.id],
+      });
+    }
+    if (statements.length) await this.db.batch(statements);
+    return statements.length;
   }
 
   async touch(id: string): Promise<void> {
@@ -256,22 +330,31 @@ export class EntityRepository {
   async search(campaignId: string | null, term: string, limit = 40): Promise<SearchHit[]> {
     const trimmed = term.trim();
     if (!trimmed) return [];
-    const like = `%${trimmed}%`;
+    const words = trimmed.split(/\s+/).filter(Boolean).slice(0, 8);
     const params: (string | number)[] = [];
     let scope = "";
     if (campaignId) {
       scope = "(campaign_id = ? OR id = ?) AND";
       params.push(campaignId, campaignId);
     }
+    // every word must appear in some searchable column; relevance is ranked below
+    const perWord = words.map(
+      () =>
+        "(name LIKE ? COLLATE NOCASE OR summary LIKE ? COLLATE NOCASE OR body_md LIKE ? COLLATE NOCASE OR dm_notes_md LIKE ? COLLATE NOCASE OR secret_md LIKE ? COLLATE NOCASE OR read_aloud_md LIKE ? COLLATE NOCASE OR tags LIKE ? COLLATE NOCASE)",
+    );
+    for (const word of words) {
+      const like = `%${word}%`;
+      params.push(like, like, like, like, like, like, like);
+    }
     const rows = await this.db.select(
-      `SELECT ${ENTITY_COLUMNS} FROM entities WHERE ${scope} (
-        name LIKE ? COLLATE NOCASE OR summary LIKE ? COLLATE NOCASE OR body_md LIKE ? COLLATE NOCASE OR
-        dm_notes_md LIKE ? COLLATE NOCASE OR secret_md LIKE ? COLLATE NOCASE OR read_aloud_md LIKE ? COLLATE NOCASE OR tags LIKE ? COLLATE NOCASE
-      ) ORDER BY CASE WHEN name LIKE ? COLLATE NOCASE THEN 0 ELSE 1 END, name COLLATE NOCASE LIMIT ?`,
-      [...params, like, like, like, like, like, like, like, like, limit],
+      `SELECT ${ENTITY_COLUMNS} FROM entities WHERE ${scope} ${perWord.join(" AND ")}
+       ORDER BY CASE WHEN name LIKE ? COLLATE NOCASE THEN 0 ELSE 1 END, name COLLATE NOCASE LIMIT ?`,
+      [...params, `%${trimmed}%`, Math.max(limit * 4, 100)],
     );
     const lower = trimmed.toLowerCase();
-    return rows.map(mapEntity).map((entity) => {
+    const firstWord = words[0]!.toLowerCase();
+    const hits = rows.map(mapEntity).map((entity): SearchHit => {
+      const score = scoreSearchHit(entity, trimmed);
       const candidates: [string, string][] = [
         ["name", entity.name],
         ["summary", entity.summary],
@@ -281,17 +364,22 @@ export class EntityRepository {
         ["secret", entity.secret_md],
         ["tags", entity.tags.join(", ")],
       ];
-      for (const [field, value] of candidates) {
-        const index = value.toLowerCase().indexOf(lower);
-        if (index >= 0) {
-          const start = Math.max(0, index - 50);
-          const snippet = `${start > 0 ? "…" : ""}${value.slice(start, index + trimmed.length + 70)}${index + trimmed.length + 70 < value.length ? "…" : ""
-            }`;
-          return { entity, field, snippet: snippet.replace(/\s+/g, " ") };
+      for (const needle of [lower, firstWord]) {
+        for (const [field, value] of candidates) {
+          const index = value.toLowerCase().indexOf(needle);
+          if (index >= 0) {
+            const start = Math.max(0, index - 50);
+            const snippet = `${start > 0 ? "…" : ""}${value.slice(start, index + needle.length + 70)}${index + needle.length + 70 < value.length ? "…" : ""}`;
+            return { entity, field, snippet: snippet.replace(/\s+/g, " "), score };
+          }
         }
       }
-      return { entity, field: "name", snippet: entity.summary };
+      return { entity, field: "name", snippet: entity.summary, score };
     });
+    return hits
+      .filter((h) => h.score > 0)
+      .sort((a, b) => b.score - a.score || a.entity.name.localeCompare(b.entity.name))
+      .slice(0, limit);
   }
 
   // ---- links ----
