@@ -59,6 +59,12 @@ export function draftToInput(draft: EntityDraft, campaignId: string, worldId: st
   };
 }
 
+/** Every record type the Locations tab can create. */
+const LOCATION_TAB_KINDS: EntityKind[] = [...GEOGRAPHIC_KINDS, "shop"];
+
+/** Lore records and characters may sit under any location, in addition to their own parents. */
+const withLocations = (kinds: EntityKind[]): EntityKind[] => [...new Set([...kinds, ...LOCATION_TAB_KINDS])];
+
 const PARENT_KINDS: Partial<Record<EntityKind, EntityKind[]>> = {
   continent: ["world"],
   region: ["world", "continent", "kingdom"],
@@ -69,13 +75,14 @@ const PARENT_KINDS: Partial<Record<EntityKind, EntityKind[]>> = {
   location: ["world", "continent", "region", "kingdom", "settlement", "district", "location"],
   dungeon: ["world", "continent", "region", "kingdom", "settlement", "district", "location", "building"],
   shop: ["settlement", "district", "building"],
-  npc: ["settlement", "district", "building", "location", "dungeon", "faction"],
+  npc: withLocations(["faction"]),
+  pc: withLocations([]),
   encounter: ["dungeon", "location", "settlement", "region", "room"],
-  article: ["world", "article"],
-  document: ["world", "article", "location", "dungeon"],
-  secret: ["npc", "pc", "faction", "location", "settlement", "dungeon", "quest", "article"],
-  trap: ["dungeon", "location", "building"],
-  event: ["world", "region", "kingdom", "settlement"],
+  article: withLocations(["article"]),
+  document: withLocations(["article"]),
+  secret: withLocations(["npc", "pc", "faction", "quest", "article"]),
+  trap: withLocations([]),
+  event: withLocations([]),
   session: ["campaign"],
   spell: [],
 };
