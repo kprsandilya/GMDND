@@ -340,10 +340,8 @@ function MapView({ mapId, active, onDeleted }: { mapId: string; active: boolean;
   useEffect(() => {
     if (!win || status !== "ready") return;
     const points = [
-      ...(links.data ?? []).filter((l) => l.x !== null && l.y !== null).map((l) => {
-        const name = places.data?.find((e) => e.id === l.entity_id)?.name;
-        return { id: l.id, x: l.x!, y: l.y!, label: name ? `${name} · ${l.feature_name ?? l.feature_type}` : (l.feature_name ?? ""), color: LINK_COLOR };
-      }),
+      // Linked locations get a marker only: the generator already prints the place name on the map.
+      ...(links.data ?? []).filter((l) => l.x !== null && l.y !== null).map((l) => ({ id: l.id, x: l.x!, y: l.y!, label: "", color: LINK_COLOR })),
       ...(annotations.data ?? []).filter((a) => !a.hidden).map((a) => ({ id: a.id, x: a.x, y: a.y, label: a.title, color: a.color ?? ANNOTATION_COLORS[a.kind] })),
       ...(picked ? [{ id: "picked", x: picked.x, y: picked.y, label: picked.name, color: "#ff7a2f" }] : []),
     ];
@@ -368,6 +366,9 @@ function MapView({ mapId, active, onDeleted }: { mapId: string; active: boolean;
         hit.setAttribute("data-loc-target", link.entity_id);
         const entityId = link.entity_id;
         const entityName = places.data?.find((e) => e.id === entityId)?.name ?? link.feature_name ?? "Location";
+        const tooltip = doc.createElementNS(ns, "title");
+        tooltip.textContent = link.feature_name && link.feature_name !== entityName ? `${entityName} · ${link.feature_name}` : entityName;
+        hit.appendChild(tooltip);
         hit.addEventListener("click", (e) => {
           e.stopPropagation();
           setSelectedLocationId((prev) => (prev === entityId ? null : entityId));
