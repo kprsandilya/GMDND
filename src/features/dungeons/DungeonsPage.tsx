@@ -19,6 +19,7 @@ import { Inspector } from "./Inspector";
 import { MapCanvas } from "./MapCanvas";
 import { useDungeonPlay } from "./useDungeonPlay";
 import { TableControl } from "@/features/table/TableControl";
+import { FLOOR_NOTES_SAVED, onAppEvent, type FloorNotesSaved } from "@/app/windowEvents";
 
 export function DungeonsPage() {
   const { id } = useParams<{ id: string }>();
@@ -118,6 +119,16 @@ function DungeonView({ dungeonId }: { dungeonId: string }) {
     window.addEventListener("dm:place-token", handler);
     return () => window.removeEventListener("dm:place-token", handler);
   }, []);
+
+  // Notes saved in a pop-out window: reload this floor so the inspector shows them.
+  useEffect(
+    () =>
+      onAppEvent<FloorNotesSaved>(FLOOR_NOTES_SAVED, (p) => {
+        const s = useEditor.getState();
+        if (s.floorId === p.floorId && s.data?.floor.notes_md !== p.notes_md) void s.refresh();
+      }),
+    [],
+  );
 
   const createFloor = useAction(
     (input: { name: string; width: number; height: number; level: number }) => repos.dungeons.createFloor({ dungeon_id: dungeonId, name: input.name, width: input.width, height: input.height, level: input.level, cell_feet: settings.defaultCellFeet, sort_order: (floors.data?.length ?? 0) }),

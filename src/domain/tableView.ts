@@ -24,7 +24,7 @@ export function playerView(data: FloorData, settings: Pick<TableViewSettings, "f
   const explored = new Set(data.rooms.filter((r) => r.state.explored).map((r) => r.id));
   const roomVisible = (roomId: string | null) => !settings.fog || (roomId !== null && explored.has(roomId));
   const filtered: FloorData = {
-    floor: data.floor,
+    floor: { ...data.floor, notes_md: "" },
     // rooms keep their shape but players never see DM text; names stay (they are on the map key)
     rooms: data.rooms.map((r) => ({ ...r, entity: { ...r.entity, dm_notes_md: "", secret_md: "", body_md: "", read_aloud_md: "" } })),
     doors: data.doors.filter((d) => !(d.hidden && !d.discovered) && !(d.kind === "secret" && !d.discovered)),

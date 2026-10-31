@@ -5,7 +5,8 @@ import { Toaster } from "sonner";
 import { AppProvider } from "./app/appContext";
 import { AppRoutes } from "./app/router";
 import { useAppStore } from "./app/appStore";
-import { isTableWindow } from "./app/platform";
+import { floorNotesWindowFloorId, isTableWindow } from "./app/platform";
+import { FloorNotesWindow } from "./features/dungeons/FloorNotesWindow";
 import { TableView } from "./features/table/TableView";
 import { TooltipProvider } from "./components/ui";
 
@@ -21,6 +22,8 @@ function useThemeAttribute() {
   }, [theme]);
 }
 
+const toaster = <Toaster theme="dark" position="bottom-right" toastOptions={{ style: { background: "var(--color-bg-elevated)", color: "var(--color-ink)", border: "1px solid var(--color-border-strong)", fontSize: 13 } }} />;
+
 export function App() {
   useThemeAttribute();
   if (isTableWindow()) {
@@ -29,6 +32,22 @@ export function App() {
         <AppProvider minimal>
           <TableView />
         </AppProvider>
+      </QueryClientProvider>
+    );
+  }
+  const notesFloorId = floorNotesWindowFloorId();
+  if (notesFloorId) {
+    // Pop-out notes editor: database only, no seeding or backups (the main window owns those).
+    return (
+      <QueryClientProvider client={queryClient}>
+        <TooltipProvider>
+          <HashRouter>
+            <AppProvider minimal>
+              <FloorNotesWindow floorId={notesFloorId} />
+            </AppProvider>
+          </HashRouter>
+        </TooltipProvider>
+        {toaster}
       </QueryClientProvider>
     );
   }
@@ -41,7 +60,7 @@ export function App() {
           </AppProvider>
         </HashRouter>
       </TooltipProvider>
-      <Toaster theme="dark" position="bottom-right" toastOptions={{ style: { background: "var(--color-bg-elevated)", color: "var(--color-ink)", border: "1px solid var(--color-border-strong)", fontSize: 13 } }} />
+      {toaster}
     </QueryClientProvider>
   );
 }

@@ -485,6 +485,13 @@ ALTER TABLE timeline_events ADD COLUMN confidence TEXT NOT NULL DEFAULT 'certain
 ALTER TABLE timeline_events ADD COLUMN manual_order INTEGER NOT NULL DEFAULT 0;
 `,
   },
+  {
+    version: 4,
+    name: "floor notes",
+    sql: `
+ALTER TABLE dungeon_floors ADD COLUMN notes_md TEXT NOT NULL DEFAULT '';
+`,
+  },
 ];
 
 export const CURRENT_SCHEMA_VERSION = MIGRATIONS[MIGRATIONS.length - 1]!.version;

@@ -1,14 +1,15 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { BookOpen, DoorOpen, Eye, EyeOff, Hand, ImagePlus, RotateCcw, Swords, Trash2 } from "lucide-react";
-import { useState } from "react";
+import { BookOpen, DoorOpen, ExternalLink, Eye, EyeOff, Hand, ImagePlus, RotateCcw, Swords, Trash2 } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router";
 import { toast } from "sonner";
 import { useRepos } from "@/app/appContext";
 import { platform, IMAGE_FILTER } from "@/app/platform";
 import { useEntities, useEntity } from "@/app/queries";
+import { emitFloorNotesSaved } from "@/app/windowEvents";
 import { EntityPicker } from "@/components/EntityPicker";
 import { InventoryPanel, useInventory } from "@/components/InventoryPanel";
-import { MarkdownView } from "@/components/Markdown";
+import { MarkdownEditor, MarkdownView } from "@/components/Markdown";
 import { Badge, Button, Checkbox, Field, Input, Select, Textarea } from "@/components/ui";
 import { availableInteractions, defaultInteractionsFor } from "@/domain/interactions";
 import type { Door, InteractionDefinition, MapMarker, MapObject, Room, Token } from "@/domain/types";
@@ -89,10 +90,17 @@ export function Inspector({ play, onStartEncounter, onOpenRoomRecord }: { play: 
   return null;
 }
 
-function Section({ title, children, className }: { title: string; children: React.ReactNode; className?: string }) {
+function Section({ title, children, className, action }: { title: string; children: React.ReactNode; className?: string; action?: React.ReactNode }) {
   return (
     <div className={cn("border-b border-border p-3", className)}>
-      <div className="label">{title}</div>
+      {action ? (
+        <div className="label flex items-center gap-2">
+          {title}
+          {action}
+        </div>
+      ) : (
+        <div className="label">{title}</div>
+      )}
       {children}
     </div>
   );
@@ -110,6 +118,65 @@ function Header({ title, badge, actions }: { title: React.ReactNode; badge?: str
 
 // ---- floor ----
 
+/**
+ * DM notes for the current floor: Markdown with `[[Name]]` links, edited in Edit mode and shown read-only
+ * in Play mode. Saving goes through the editor store, so it is undoable like any other floor edit.
+ * "Pop out" opens the same notes in their own resizable window.
+ */
+function FloorNotes() {
+  const floor = useEditor((s) => s.data)!.floor;
+  const mode = useEditor((s) => s.mode);
+  const updateFloor = useEditor((s) => s.updateFloor);
+  const [draft, setDraft] = useState(floor.notes_md);
+  const last = useRef({ id: floor.id, notes: floor.notes_md });
+  // A different floor replaces the draft. A new saved version (pop-out save, undo/redo) replaces it only
+  // when there is no unsaved text here, so typing is never thrown away.
+  useEffect(() => {
+    const prev = last.current;
+    if (prev.id !== floor.id) setDraft(floor.notes_md);
+    else if (prev.notes !== floor.notes_md) {
+      setDraft((d) => (d === prev.notes ? floor.notes_md : d));
+      // keep an open pop-out in step with undo/redo and inline saves
+      emitFloorNotesSaved({ floorId: floor.id, notes_md: floor.notes_md });
+    }
+    last.current = { id: floor.id, notes: floor.notes_md };
+  }, [floor.id, floor.notes_md]);
+  const dirty = draft !== floor.notes_md;
+  const popOut = () => void platform.openFloorNotesWindow(floor.id, floor.name).catch((e) => toast.error(errorMessage(e)));
+  const popOutButton = (
+    <button className="ml-auto flex items-center gap-1 text-[11px] normal-case text-ink-faint hover:text-ink" onClick={popOut} title="Open these notes in their own window">
+      <ExternalLink size={11} /> Pop out
+    </button>
+  );
+
+  if (mode !== "edit") {
+    if (!floor.notes_md.trim()) return null;
+    return (
+      <Section title="Floor notes" action={popOutButton} className="max-h-72 overflow-y-auto">
+        <MarkdownView source={floor.notes_md} className="text-[12.5px]" />
+      </Section>
+    );
+  }
+  return (
+    <Section title="Floor notes" action={popOutButton}>
+      <MarkdownEditor value={draft} onChange={setDraft} rows={5} placeholder="What this level is for, who lives here, how it connects to [[Other Places]]…" />
+      <div className="mt-1 flex items-center gap-2">
+        <Button size="sm" variant="primary" disabled={!dirty} onClick={() => void updateFloor({ notes_md: draft })}>
+          Save notes
+        </Button>
+        {dirty && (
+          <>
+            <Button size="sm" variant="ghost" onClick={() => setDraft(floor.notes_md)}>
+              Discard
+            </Button>
+            <span className="text-[11px] text-gold">Unsaved changes</span>
+          </>
+        )}
+      </div>
+    </Section>
+  );
+}
+
 function FloorInspector() {
   const data = useEditor((s) => s.data)!;
   const mode = useEditor((s) => s.mode);
@@ -117,6 +184,12 @@ function FloorInspector() {
   const updateFloor = useEditor((s) => s.updateFloor);
   const [name, setName] = useState(data.floor.name);
   const [size, setSize] = useState({ w: data.floor.width, h: data.floor.height, feet: data.floor.cell_feet });
+  // Follow the selected floor: switching floors (or undo) must not leave the previous floor's values
+  // in these boxes, or blurring the name field would rename the new floor.
+  useEffect(() => {
+    setName(data.floor.name);
+    setSize({ w: data.floor.width, h: data.floor.height, feet: data.floor.cell_feet });
+  }, [data.floor.id, data.floor.name, data.floor.width, data.floor.height, data.floor.cell_feet]);
   const explored = data.rooms.filter((r) => r.state.explored).length;
   return (
     <div className="flex h-full flex-col">
@@ -175,6 +248,7 @@ function FloorInspector() {
           <p className="mt-2 text-[11.5px] text-ink-faint">Select a token, then click a highlighted cell (or drag the token) to move it. Select doors and objects to see available actions.</p>
         </Section>
       )}
+      <FloorNotes />
       <Section title="Rooms" className="min-h-0 flex-1 overflow-y-auto">
         <ul className="space-y-0.5">
           {data.rooms.map((r) => (
@@ -216,6 +290,11 @@ function RoomInspector({ room, play, onStartEncounter, onOpenRecord }: { room: R
   const data = useEditor((s) => s.data)!;
   const [name, setName] = useState(room.entity.name);
   const [number, setNumber] = useState(room.number ?? "");
+  // Follow the selected room (and undo/redo), so blurring a field never writes another room's values.
+  useEffect(() => {
+    setName(room.entity.name);
+    setNumber(room.number ?? "");
+  }, [room.id, room.entity.name, room.number]);
   const floorItems = useInventory({ owner_type: "room", owner_id: room.id });
   const encounters = useEntities({ kinds: ["encounter"], parent_id: room.id });
   const markers = data.markers.filter((m) => m.room_id === room.id);

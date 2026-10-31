@@ -189,6 +189,8 @@ export interface DungeonFloor {
   walls: WallSegment[];
   terrain: TerrainCell[];
   background_asset: string | null;
+  /** DM notes for this floor (Markdown, `[[Name]]` wiki links). */
+  notes_md: string;
   sort_order: number;
   created_at: string;
   updated_at: string;

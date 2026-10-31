@@ -29,6 +29,7 @@ import { useAppStore } from "./appStore";
 import { CommandPalette } from "./CommandPalette";
 import { useCampaign } from "./queries";
 import { NAV_ITEMS } from "./routes";
+import { NAVIGATE_MAIN, onAppEvent } from "./windowEvents";
 
 const ICONS: Record<string, LucideIcon> = { LayoutDashboard, BookOpen, Globe2, MapPin, Grid3x3, Swords, Users, UsersRound, Route, Package, Skull, ScrollText, Library, CalendarClock, Play, Search, Settings };
 
@@ -45,6 +46,9 @@ export function Shell() {
   useEffect(() => {
     if (atlasActive) setAtlasMounted(true);
   }, [atlasActive]);
+
+  // Links clicked in pop-out windows open here.
+  useEffect(() => onAppEvent<{ href: string }>(NAVIGATE_MAIN, ({ href }) => navigate(href)), [navigate]);
 
   // Global shortcuts: Ctrl+K palette, Ctrl+1..9 navigation, Ctrl+Shift+F search.
   useEffect(() => {

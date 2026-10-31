@@ -28,6 +28,7 @@ export function mapFloor(row: Row): DungeonFloor {
     walls: parseJson<WallSegment[]>(row.walls, []),
     terrain: parseJson<TerrainCell[]>(row.terrain, []),
     background_asset: str(row.background_asset),
+    notes_md: text(row.notes_md),
     sort_order: num(row.sort_order) ?? 0,
     created_at: text(row.created_at),
     updated_at: text(row.updated_at),

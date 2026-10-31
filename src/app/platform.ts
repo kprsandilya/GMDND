@@ -23,6 +23,34 @@ export function isTableWindow(): boolean {
   }
 }
 
+/** Pop-out floor-notes windows are labelled `floor-notes-<floor id>` (one window per floor). */
+export const FLOOR_NOTES_WINDOW_PREFIX = "floor-notes-";
+
+/** The floor id when running inside a pop-out floor-notes window, else null. */
+export function floorNotesWindowFloorId(): string | null {
+  if (!isTauri()) return null;
+  try {
+    const label = getCurrentWebviewWindow().label;
+    return label.startsWith(FLOOR_NOTES_WINDOW_PREFIX) ? label.slice(FLOOR_NOTES_WINDOW_PREFIX.length) : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Opens a webview window at the app root, or focuses it if that label is already open. */
+async function openAppWindow(label: string, options: { title: string; width: number; height: number }): Promise<void> {
+  const existing = await WebviewWindow.getByLabel(label);
+  if (existing) {
+    await existing.setFocus();
+    return;
+  }
+  const win = new WebviewWindow(label, { url: "/", center: true, ...options });
+  await new Promise<void>((resolve, reject) => {
+    void win.once("tauri://created", () => resolve());
+    void win.once("tauri://error", (e) => reject(new Error(String(e.payload))));
+  });
+}
+
 export interface AppPaths {
   data_dir: string;
   db_path: string;
@@ -105,18 +133,19 @@ export const platform = {
   openExternal: (url: string): Promise<void> => (isTauri() ? openUrl(url) : Promise.resolve(void window.open(url, "_blank"))),
 
   // table display window
-  openTableWindow: async (): Promise<void> => {
-    const existing = await WebviewWindow.getByLabel(TABLE_WINDOW_LABEL);
-    if (existing) {
-      await existing.setFocus();
-      return;
-    }
-    const win = new WebviewWindow(TABLE_WINDOW_LABEL, { url: "/", title: "DM Workbench — Table view", width: 1280, height: 800, center: true });
-    await new Promise<void>((resolve, reject) => {
-      void win.once("tauri://created", () => resolve());
-      void win.once("tauri://error", (e) => reject(new Error(String(e.payload))));
-    });
+  openTableWindow: (): Promise<void> => openAppWindow(TABLE_WINDOW_LABEL, { title: "DM Workbench — Table view", width: 1280, height: 800 }),
+  /** Pop-out editor for one floor's notes; reopening the same floor focuses the existing window. */
+  openFloorNotesWindow: (floorId: string, floorName: string): Promise<void> =>
+    openAppWindow(`${FLOOR_NOTES_WINDOW_PREFIX}${floorId}`, { title: `Floor notes — ${floorName}`, width: 900, height: 700 }),
+  focusMainWindow: async (): Promise<void> => {
+    const main = await WebviewWindow.getByLabel("main");
+    await main?.setFocus();
   },
+  /** Asks before closing this window while `isDirty()` is true. */
+  guardClose: (isDirty: () => boolean, message: string): Promise<() => void> =>
+    getCurrentWebviewWindow().onCloseRequested(async (event) => {
+      if (isDirty() && !(await confirm(message, { title: "Unsaved notes", kind: "warning" }))) event.preventDefault();
+    }),
   toggleFullscreen: async (): Promise<void> => {
     const win = getCurrentWebviewWindow();
     await win.setFullscreen(!(await win.isFullscreen()));

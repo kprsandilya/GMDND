@@ -208,6 +208,16 @@ export class EntityRepository {
         params: [next.body_md, next.read_aloud_md, next.dm_notes_md, next.secret_md, next.summary, next.fields, other.id],
       });
     }
+    // dungeon floor notes are Markdown too, but live outside the entities table
+    const floors = await this.db.select<{ id: string; notes_md: string }>(
+      `SELECT f.id, f.notes_md FROM dungeon_floors f JOIN entities d ON d.id = f.dungeon_id
+       WHERE (d.campaign_id = ? OR d.id = ?) AND f.notes_md LIKE ? COLLATE NOCASE`,
+      [scopeId, scopeId, pattern],
+    );
+    for (const floor of floors) {
+      const next = renameWikiTarget(String(floor.notes_md ?? ""), entity.name, newName);
+      if (next !== floor.notes_md) statements.push({ sql: "UPDATE dungeon_floors SET notes_md = ? WHERE id = ?", params: [next, floor.id] });
+    }
     if (statements.length) await this.db.batch(statements);
     return statements.length;
   }

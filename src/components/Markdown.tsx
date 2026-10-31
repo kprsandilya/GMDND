@@ -10,10 +10,11 @@ import { cn } from "@/lib/utils";
 import { Textarea } from "./ui";
 
 /** Renders markdown; `[[Name]]` wiki links resolve to entities in the active campaign. */
-export function MarkdownView({ source, className, variant }: { source: string; className?: string; variant?: "read-aloud" | "secret" }) {
+export function MarkdownView({ source, className, variant, onNavigate }: { source: string; className?: string; variant?: "read-aloud" | "secret"; onNavigate?: (href: string) => void }) {
   const repos = useRepos();
   const campaignId = useCampaignId();
-  const navigate = useNavigate();
+  const routerNavigate = useNavigate();
+  const navigate = (href: string) => (onNavigate ? onNavigate(href) : void routerNavigate(href));
   const names = useMemo(() => [...new Set(extractWikiLinks(source).map((l) => l.target))], [source]);
   const resolved = useQuery({
     queryKey: ["wiki", campaignId, names],
