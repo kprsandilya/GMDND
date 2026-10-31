@@ -3,22 +3,45 @@ import { Columns2, Eye, PencilLine, Save } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { useRepos } from "@/app/appContext";
-import { platform } from "@/app/platform";
-import { emitFloorNotesSaved, FLOOR_NOTES_SAVED, onAppEvent, requestMainNavigation, type FloorNotesSaved } from "@/app/windowEvents";
+import { platform, type NotesTarget } from "@/app/platform";
+import { emitNotesSaved, NOTES_SAVED, onAppEvent, requestMainNavigation, type NotesSaved } from "@/app/windowEvents";
 import { MarkdownView } from "@/components/Markdown";
 import { Button } from "@/components/ui";
+import type { Repositories } from "@/persistence/repositories";
 import { cn, errorMessage } from "@/lib/utils";
 
 type Layout = "split" | "write" | "preview";
 
+interface LoadedNotes {
+  title: string;
+  subtitle: string;
+  notes: string;
+}
+
+/** Reads the notes a target points at: a dungeon's DM notes, or one floor's notes. */
+export async function loadNotes(repos: Repositories, target: NotesTarget): Promise<LoadedNotes> {
+  if (target.scope === "dungeon") {
+    const dungeon = await repos.entities.get(target.id);
+    return { title: dungeon.name, subtitle: "Dungeon notes", notes: dungeon.dm_notes_md };
+  }
+  const floor = await repos.dungeons.getFloor(target.id);
+  const dungeon = await repos.entities.find(floor.dungeon_id);
+  return { title: floor.name, subtitle: `${dungeon?.name ?? "Dungeon"} · floor notes`, notes: floor.notes_md };
+}
+
+/** Writes notes for a target and returns the stored text. */
+export async function saveNotes(repos: Repositories, target: NotesTarget, notes: string): Promise<string> {
+  if (target.scope === "dungeon") return (await repos.entities.update(target.id, { dm_notes_md: notes })).dm_notes_md;
+  return (await repos.dungeons.updateFloor(target.id, { notes_md: notes })).notes_md;
+}
+
 /**
- * Pop-out window for one floor's DM notes: a large editor with a live preview. Saves write to the database
- * and tell the main window to refresh; `[[links]]` open in the main window.
+ * Pop-out window for a dungeon's or floor's DM notes: a large editor with a live preview. Saves write to
+ * the database and tell the main window to refresh; `[[links]]` open in the main window.
  */
-export function FloorNotesWindow({ floorId }: { floorId: string }) {
+export function NotesWindow({ target }: { target: NotesTarget }) {
   const repos = useRepos();
-  const floor = useQuery({ queryKey: ["floorNotes", floorId], queryFn: () => repos.dungeons.getFloor(floorId), retry: false });
-  const dungeon = useQuery({ queryKey: ["entities", "one", floor.data?.dungeon_id], queryFn: () => repos.entities.find(floor.data!.dungeon_id), enabled: !!floor.data });
+  const loaded = useQuery({ queryKey: ["notesWindow", target.scope, target.id], queryFn: () => loadNotes(repos, target), retry: false });
   const [saved, setSaved] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
   const [layout, setLayout] = useState<Layout>("split");
@@ -29,17 +52,17 @@ export function FloorNotesWindow({ floorId }: { floorId: string }) {
 
   // first load
   useEffect(() => {
-    if (floor.data && saved === null) {
-      setSaved(floor.data.notes_md);
-      setDraft(floor.data.notes_md);
+    if (loaded.data && saved === null) {
+      setSaved(loaded.data.notes);
+      setDraft(loaded.data.notes);
     }
-  }, [floor.data, saved]);
+  }, [loaded.data, saved]);
 
   // saved elsewhere (main window): take it over unless there is unsaved text here
   useEffect(
     () =>
-      onAppEvent<FloorNotesSaved>(FLOOR_NOTES_SAVED, (p) => {
-        if (p.floorId !== floorId || p.notes_md === saved) return;
+      onAppEvent<NotesSaved>(NOTES_SAVED, (p) => {
+        if (p.scope !== target.scope || p.id !== target.id || p.notes_md === saved) return;
         if (dirtyRef.current) {
           toast.warning("These notes were changed in the main window. Saving here will replace that version.");
           return;
@@ -47,7 +70,7 @@ export function FloorNotesWindow({ floorId }: { floorId: string }) {
         setSaved(p.notes_md);
         setDraft(p.notes_md);
       }),
-    [floorId, saved],
+    [target.scope, target.id, saved],
   );
 
   // warn before closing with unsaved text
@@ -57,18 +80,18 @@ export function FloorNotesWindow({ floorId }: { floorId: string }) {
     return () => unlisten?.();
   }, []);
 
-  // window title shows the floor and an unsaved marker
+  // window title shows what is being edited and an unsaved marker
   useEffect(() => {
-    if (floor.data) document.title = `${dirty ? "• " : ""}Floor notes — ${dungeon.data?.name ? `${dungeon.data.name} / ` : ""}${floor.data.name}`;
-  }, [floor.data, dungeon.data, dirty]);
+    if (loaded.data) document.title = `${dirty ? "• " : ""}${loaded.data.subtitle} — ${loaded.data.title}`;
+  }, [loaded.data, dirty]);
 
   const save = async () => {
     if (!dirty || busy) return;
     setBusy(true);
     try {
-      const updated = await repos.dungeons.updateFloor(floorId, { notes_md: draft });
-      setSaved(updated.notes_md);
-      emitFloorNotesSaved({ floorId, notes_md: updated.notes_md });
+      const stored = await saveNotes(repos, target, draft);
+      setSaved(stored);
+      emitNotesSaved({ ...target, notes_md: stored });
     } catch (e) {
       toast.error(errorMessage(e));
     } finally {
@@ -89,8 +112,8 @@ export function FloorNotesWindow({ floorId }: { floorId: string }) {
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
-  if (floor.isError) return <Centered text="This floor no longer exists. You can close this window." />;
-  if (!floor.data || saved === null) return <Centered text="Loading notes…" />;
+  if (loaded.isError) return <Centered text={`This ${target.scope} no longer exists. You can close this window.`} />;
+  if (!loaded.data || saved === null) return <Centered text="Loading notes…" />;
 
   const openInMain = (href: string) => {
     requestMainNavigation(href);
@@ -101,8 +124,8 @@ export function FloorNotesWindow({ floorId }: { floorId: string }) {
     <div className="flex h-full flex-col bg-bg">
       <div className="flex shrink-0 items-center gap-2 border-b border-border bg-bg-elevated px-3 py-2">
         <div className="min-w-0">
-          <div className="truncate font-display text-[15px] text-ember-soft">{floor.data.name}</div>
-          <div className="truncate text-[11px] text-ink-faint">{dungeon.data?.name ?? "Dungeon"} · floor notes · Markdown, [[Name]] links open in the main window</div>
+          <div className="truncate font-display text-[15px] text-ember-soft">{loaded.data.title}</div>
+          <div className="truncate text-[11px] text-ink-faint">{loaded.data.subtitle} · Markdown, [[Name]] links open in the main window</div>
         </div>
         <div className="ml-auto flex items-center gap-1">
           <div className="flex rounded border border-border">
@@ -135,7 +158,7 @@ export function FloorNotesWindow({ floorId }: { floorId: string }) {
             spellCheck
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
-            placeholder={"What this level is for, who lives here, what changes when the party arrives…\n\nLink records with [[Name]]."}
+            placeholder={target.scope === "dungeon" ? "The big picture: who built this place, what the villain wants, how the floors connect, the clock…\n\nLink records with [[Name]]." : "What this level is for, who lives here, what changes when the party arrives…\n\nLink records with [[Name]]."}
             className={cn("selectable h-full w-full resize-none bg-bg p-4 font-mono text-[13px] leading-relaxed text-ink outline-none placeholder:text-ink-faint", layout === "split" && "border-r border-border")}
           />
         )}

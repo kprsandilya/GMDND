@@ -67,3 +67,29 @@ describe("floor notes", () => {
     expect(view.data.floor.notes_md).toBe("");
   });
 });
+
+describe("pop-out notes targets", () => {
+  it("load and save dungeon notes (the dungeon's DM notes) and floor notes", async () => {
+    const { loadNotes, saveNotes } = await import("@/features/dungeons/NotesWindow");
+    const { repos, campaign, floor } = await setup();
+    const dungeonId = floor.dungeon_id;
+    expect(await loadNotes(repos, { scope: "dungeon", id: dungeonId })).toEqual({ title: "Crypt", subtitle: "Dungeon notes", notes: "" });
+    expect(await saveNotes(repos, { scope: "dungeon", id: dungeonId }, "Five hours on the [[Clock]].")).toBe("Five hours on the [[Clock]].");
+    expect((await repos.entities.get(dungeonId)).dm_notes_md).toBe("Five hours on the [[Clock]].");
+
+    await saveNotes(repos, { scope: "floor", id: floor.id }, "Flooded.");
+    expect(await loadNotes(repos, { scope: "floor", id: floor.id })).toEqual({ title: "Upper Vault", subtitle: "Crypt · floor notes", notes: "Flooded." });
+
+    // dungeon notes follow renames like any record's notes
+    const clock = await repos.entities.create({ campaign_id: campaign.id, kind: "article", name: "Clock" });
+    await repos.entities.update(clock.id, { name: "The Five-Hour Clock" });
+    expect((await repos.entities.get(dungeonId)).dm_notes_md).toBe("Five hours on the [[The Five-Hour Clock]].");
+  });
+
+  it("report a missing target", async () => {
+    const { loadNotes } = await import("@/features/dungeons/NotesWindow");
+    const { repos } = await setup();
+    await expect(loadNotes(repos, { scope: "floor", id: "nope" })).rejects.toThrow();
+    await expect(loadNotes(repos, { scope: "dungeon", id: "nope" })).rejects.toThrow();
+  });
+});

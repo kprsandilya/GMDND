@@ -4,9 +4,9 @@ import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router";
 import { toast } from "sonner";
 import { useRepos } from "@/app/appContext";
-import { platform, IMAGE_FILTER } from "@/app/platform";
+import { platform, IMAGE_FILTER, type NotesTarget } from "@/app/platform";
 import { useEntities, useEntity } from "@/app/queries";
-import { emitFloorNotesSaved } from "@/app/windowEvents";
+import { emitNotesSaved } from "@/app/windowEvents";
 import { EntityPicker } from "@/components/EntityPicker";
 import { InventoryPanel, useInventory } from "@/components/InventoryPanel";
 import { MarkdownEditor, MarkdownView } from "@/components/Markdown";
@@ -119,61 +119,123 @@ function Header({ title, badge, actions }: { title: React.ReactNode; badge?: str
 // ---- floor ----
 
 /**
- * DM notes for the current floor: Markdown with `[[Name]]` links, edited in Edit mode and shown read-only
- * in Play mode. Saving goes through the editor store, so it is undoable like any other floor edit.
- * "Pop out" opens the same notes in their own resizable window.
+ * A notes block in the side panel: Markdown with `[[Name]]` links, edited in Edit mode and shown read-only
+ * in Play mode, with a "Pop out" button that opens the same notes in their own resizable window.
+ * `target` identifies the notes; a new target replaces the draft, while a new saved version (pop-out save,
+ * undo/redo) replaces it only when there is no unsaved text here, so typing is never thrown away.
  */
-function FloorNotes() {
-  const floor = useEditor((s) => s.data)!.floor;
+function NotesSection({
+  title,
+  target,
+  windowTitle,
+  saved,
+  onSave,
+  placeholder,
+}: {
+  title: string;
+  target: NotesTarget;
+  windowTitle: string;
+  saved: string;
+  onSave: (notes: string) => Promise<unknown>;
+  placeholder: string;
+}) {
   const mode = useEditor((s) => s.mode);
-  const updateFloor = useEditor((s) => s.updateFloor);
-  const [draft, setDraft] = useState(floor.notes_md);
-  const last = useRef({ id: floor.id, notes: floor.notes_md });
-  // A different floor replaces the draft. A new saved version (pop-out save, undo/redo) replaces it only
-  // when there is no unsaved text here, so typing is never thrown away.
+  const [draft, setDraft] = useState(saved);
+  const [open, setOpen] = useState(true);
+  const last = useRef({ key: `${target.scope}:${target.id}`, notes: saved });
   useEffect(() => {
+    const key = `${target.scope}:${target.id}`;
     const prev = last.current;
-    if (prev.id !== floor.id) setDraft(floor.notes_md);
-    else if (prev.notes !== floor.notes_md) {
-      setDraft((d) => (d === prev.notes ? floor.notes_md : d));
-      // keep an open pop-out in step with undo/redo and inline saves
-      emitFloorNotesSaved({ floorId: floor.id, notes_md: floor.notes_md });
+    if (prev.key !== key) setDraft(saved);
+    else if (prev.notes !== saved) {
+      setDraft((d) => (d === prev.notes ? saved : d));
+      // keep an open pop-out in step with inline saves and undo/redo
+      emitNotesSaved({ ...target, notes_md: saved });
     }
-    last.current = { id: floor.id, notes: floor.notes_md };
-  }, [floor.id, floor.notes_md]);
-  const dirty = draft !== floor.notes_md;
-  const popOut = () => void platform.openFloorNotesWindow(floor.id, floor.name).catch((e) => toast.error(errorMessage(e)));
-  const popOutButton = (
-    <button className="ml-auto flex items-center gap-1 text-[11px] normal-case text-ink-faint hover:text-ink" onClick={popOut} title="Open these notes in their own window">
-      <ExternalLink size={11} /> Pop out
-    </button>
+    last.current = { key, notes: saved };
+  }, [target.scope, target.id, saved]);
+  const dirty = draft !== saved;
+  const popOut = () => void platform.openNotesWindow(target, windowTitle).catch((e) => toast.error(errorMessage(e)));
+  const header = (
+    <span className="ml-auto flex items-center gap-2 normal-case">
+      <button className="flex items-center gap-1 text-[11px] text-ink-faint hover:text-ink" onClick={popOut} title="Open these notes in their own window">
+        <ExternalLink size={11} /> Pop out
+      </button>
+      <button className="text-[11px] text-ink-faint hover:text-ink" onClick={() => setOpen((o) => !o)} title={open ? "Collapse" : "Expand"}>
+        {open ? "▾" : "▸"}
+      </button>
+    </span>
   );
 
   if (mode !== "edit") {
-    if (!floor.notes_md.trim()) return null;
+    if (!saved.trim()) return null;
     return (
-      <Section title="Floor notes" action={popOutButton} className="max-h-72 overflow-y-auto">
-        <MarkdownView source={floor.notes_md} className="text-[12.5px]" />
+      <Section title={title} action={header} className={cn(open && "max-h-72 overflow-y-auto")}>
+        {open && <MarkdownView source={saved} className="text-[12.5px]" />}
       </Section>
     );
   }
   return (
-    <Section title="Floor notes" action={popOutButton}>
-      <MarkdownEditor value={draft} onChange={setDraft} rows={5} placeholder="What this level is for, who lives here, how it connects to [[Other Places]]…" />
-      <div className="mt-1 flex items-center gap-2">
-        <Button size="sm" variant="primary" disabled={!dirty} onClick={() => void updateFloor({ notes_md: draft })}>
-          Save notes
-        </Button>
-        {dirty && (
-          <>
-            <Button size="sm" variant="ghost" onClick={() => setDraft(floor.notes_md)}>
-              Discard
+    <Section title={title} action={header}>
+      {open && (
+        <>
+          <MarkdownEditor value={draft} onChange={setDraft} rows={5} placeholder={placeholder} />
+          <div className="mt-1 flex items-center gap-2">
+            <Button size="sm" variant="primary" disabled={!dirty} onClick={() => void onSave(draft).catch((e) => toast.error(errorMessage(e)))}>
+              Save notes
             </Button>
-            <span className="text-[11px] text-gold">Unsaved changes</span>
-          </>
-        )}
-      </div>
+            {dirty && (
+              <>
+                <Button size="sm" variant="ghost" onClick={() => setDraft(saved)}>
+                  Discard
+                </Button>
+                <span className="text-[11px] text-gold">Unsaved changes</span>
+              </>
+            )}
+          </div>
+        </>
+      )}
+      {!open && dirty && <span className="text-[11px] text-gold">Unsaved changes (expand to save)</span>}
     </Section>
+  );
+}
+
+/** Notes for the whole dungeon: the dungeon record's DM notes, so they match its record page. */
+function DungeonNotes() {
+  const repos = useRepos();
+  const qc = useQueryClient();
+  const dungeonId = useEditor((s) => s.dungeonId);
+  const dungeon = useEntity(dungeonId);
+  if (!dungeon.data) return null;
+  const d = dungeon.data;
+  return (
+    <NotesSection
+      title="Dungeon notes"
+      target={{ scope: "dungeon", id: d.id }}
+      windowTitle={`Dungeon notes — ${d.name}`}
+      saved={d.dm_notes_md}
+      placeholder="The big picture: who built this place, what the villain wants, how the floors connect, the clock…"
+      onSave={async (notes) => {
+        await repos.entities.update(d.id, { dm_notes_md: notes });
+        await qc.invalidateQueries({ queryKey: ["entities"] });
+      }}
+    />
+  );
+}
+
+/** Notes for the current floor. Saving goes through the editor store, so it is undoable. */
+function FloorNotes() {
+  const floor = useEditor((s) => s.data)!.floor;
+  const updateFloor = useEditor((s) => s.updateFloor);
+  return (
+    <NotesSection
+      title="Floor notes"
+      target={{ scope: "floor", id: floor.id }}
+      windowTitle={`Floor notes — ${floor.name}`}
+      saved={floor.notes_md}
+      placeholder="What this level is for, who lives here, how it connects to [[Other Places]]…"
+      onSave={(notes) => updateFloor({ notes_md: notes })}
+    />
   );
 }
 
@@ -248,6 +310,7 @@ function FloorInspector() {
           <p className="mt-2 text-[11.5px] text-ink-faint">Select a token, then click a highlighted cell (or drag the token) to move it. Select doors and objects to see available actions.</p>
         </Section>
       )}
+      <DungeonNotes />
       <FloorNotes />
       <Section title="Rooms" className="min-h-0 flex-1 overflow-y-auto">
         <ul className="space-y-0.5">

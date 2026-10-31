@@ -19,7 +19,7 @@ import { Inspector } from "./Inspector";
 import { MapCanvas } from "./MapCanvas";
 import { useDungeonPlay } from "./useDungeonPlay";
 import { TableControl } from "@/features/table/TableControl";
-import { FLOOR_NOTES_SAVED, onAppEvent, type FloorNotesSaved } from "@/app/windowEvents";
+import { NOTES_SAVED, onAppEvent, type NotesSaved } from "@/app/windowEvents";
 
 export function DungeonsPage() {
   const { id } = useParams<{ id: string }>();
@@ -120,14 +120,18 @@ function DungeonView({ dungeonId }: { dungeonId: string }) {
     return () => window.removeEventListener("dm:place-token", handler);
   }, []);
 
-  // Notes saved in a pop-out window: reload this floor so the inspector shows them.
+  // Notes saved in a pop-out window: reload the floor or the dungeon record so the panel shows them.
   useEffect(
     () =>
-      onAppEvent<FloorNotesSaved>(FLOOR_NOTES_SAVED, (p) => {
+      onAppEvent<NotesSaved>(NOTES_SAVED, (p) => {
+        if (p.scope === "dungeon") {
+          void qc.invalidateQueries({ queryKey: ["entities"] });
+          return;
+        }
         const s = useEditor.getState();
-        if (s.floorId === p.floorId && s.data?.floor.notes_md !== p.notes_md) void s.refresh();
+        if (s.floorId === p.id && s.data?.floor.notes_md !== p.notes_md) void s.refresh();
       }),
-    [],
+    [qc],
   );
 
   const createFloor = useAction(

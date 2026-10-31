@@ -144,8 +144,9 @@ export function CombatTracker({ runId, encounter }: { runId: string; encounter: 
       </div>
       <TacticsBar encounter={encounter} combatants={ordered} active={r.status === "active"} onLog={(m) => act(() => repos.encounters.appendLog(runId, m, "info"))} />
       {r.status === "active" && <LegendaryStrip combatants={ordered} currentId={current?.id ?? null} onAct={act} />}
+      {/* Both columns share a window-relative height and scroll on their own, so long fights stay usable. */}
       <div className="grid grid-cols-[1fr_340px] gap-3 px-4 pb-3">
-        <ul className="space-y-1">
+        <ul className="max-h-[60vh] min-h-0 space-y-1 overflow-y-auto pr-1">
           {ordered.map((c) => (
             <CombatantRow
               key={c.id}
@@ -179,7 +180,7 @@ export function CombatTracker({ runId, encounter }: { runId: string; encounter: 
           ))}
           {ordered.length === 0 && <li className="text-[12px] text-ink-faint">No combatants.</li>}
         </ul>
-        <div className="flex max-h-[28rem] flex-col overflow-hidden rounded border border-border bg-bg">
+        <div className="flex max-h-[60vh] flex-col overflow-hidden rounded border border-border bg-bg">
           <Tabs
             value={selected ? rightTab : "log"}
             onValueChange={setRightTab}

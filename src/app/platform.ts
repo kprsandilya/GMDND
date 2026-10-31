@@ -23,15 +23,25 @@ export function isTableWindow(): boolean {
   }
 }
 
-/** Pop-out floor-notes windows are labelled `floor-notes-<floor id>` (one window per floor). */
-export const FLOOR_NOTES_WINDOW_PREFIX = "floor-notes-";
+/** Which notes a pop-out window edits: a whole dungeon (its DM notes) or one of its floors. */
+export interface NotesTarget {
+  scope: "dungeon" | "floor";
+  id: string;
+}
 
-/** The floor id when running inside a pop-out floor-notes window, else null. */
-export function floorNotesWindowFloorId(): string | null {
+/** Pop-out windows are labelled `<scope>-notes-<id>`, so each dungeon and floor gets at most one. */
+const NOTES_WINDOW_PREFIX: Record<NotesTarget["scope"], string> = { dungeon: "dungeon-notes-", floor: "floor-notes-" };
+
+/** The notes target when running inside a pop-out notes window, else null. */
+export function notesWindowTarget(): NotesTarget | null {
   if (!isTauri()) return null;
   try {
     const label = getCurrentWebviewWindow().label;
-    return label.startsWith(FLOOR_NOTES_WINDOW_PREFIX) ? label.slice(FLOOR_NOTES_WINDOW_PREFIX.length) : null;
+    for (const scope of ["dungeon", "floor"] as const) {
+      const prefix = NOTES_WINDOW_PREFIX[scope];
+      if (label.startsWith(prefix)) return { scope, id: label.slice(prefix.length) };
+    }
+    return null;
   } catch {
     return null;
   }
@@ -134,9 +144,9 @@ export const platform = {
 
   // table display window
   openTableWindow: (): Promise<void> => openAppWindow(TABLE_WINDOW_LABEL, { title: "DM Workbench — Table view", width: 1280, height: 800 }),
-  /** Pop-out editor for one floor's notes; reopening the same floor focuses the existing window. */
-  openFloorNotesWindow: (floorId: string, floorName: string): Promise<void> =>
-    openAppWindow(`${FLOOR_NOTES_WINDOW_PREFIX}${floorId}`, { title: `Floor notes — ${floorName}`, width: 900, height: 700 }),
+  /** Pop-out editor for a dungeon's or floor's notes; reopening the same target focuses its window. */
+  openNotesWindow: (target: NotesTarget, title: string): Promise<void> =>
+    openAppWindow(`${NOTES_WINDOW_PREFIX[target.scope]}${target.id}`, { title, width: 900, height: 700 }),
   focusMainWindow: async (): Promise<void> => {
     const main = await WebviewWindow.getByLabel("main");
     await main?.setFocus();

@@ -5,8 +5,8 @@ import { Toaster } from "sonner";
 import { AppProvider } from "./app/appContext";
 import { AppRoutes } from "./app/router";
 import { useAppStore } from "./app/appStore";
-import { floorNotesWindowFloorId, isTableWindow } from "./app/platform";
-import { FloorNotesWindow } from "./features/dungeons/FloorNotesWindow";
+import { isTableWindow, notesWindowTarget } from "./app/platform";
+import { NotesWindow } from "./features/dungeons/NotesWindow";
 import { TableView } from "./features/table/TableView";
 import { TooltipProvider } from "./components/ui";
 
@@ -35,15 +35,15 @@ export function App() {
       </QueryClientProvider>
     );
   }
-  const notesFloorId = floorNotesWindowFloorId();
-  if (notesFloorId) {
+  const notesTarget = notesWindowTarget();
+  if (notesTarget) {
     // Pop-out notes editor: database only, no seeding or backups (the main window owns those).
     return (
       <QueryClientProvider client={queryClient}>
         <TooltipProvider>
           <HashRouter>
             <AppProvider minimal>
-              <FloorNotesWindow floorId={notesFloorId} />
+              <NotesWindow target={notesTarget} />
             </AppProvider>
           </HashRouter>
         </TooltipProvider>

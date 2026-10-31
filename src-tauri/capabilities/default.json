@@ -1,11 +1,12 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Capabilities for the main window, the read-only table display window and pop-out floor-notes windows: core window features, native dialogs and revealing files in the OS file manager. Filesystem access happens only through the application's own validated commands.",
+  "description": "Capabilities for the main window, the read-only table display window and pop-out dungeon and floor notes windows: core window features, native dialogs and revealing files in the OS file manager. Filesystem access happens only through the application's own validated commands.",
   "windows": [
     "main",
     "table",
-    "floor-notes-*"
+    "floor-notes-*",
+    "dungeon-notes-*"
   ],
   "permissions": [
     "core:default",
